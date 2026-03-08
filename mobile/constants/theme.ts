@@ -1,0 +1,28 @@
+export function getColors(isDark: boolean) {
+  return {
+    background: isDark ? '#000000' : '#F5F5F5',
+    card: isDark ? '#1C1C1E' : '#FFFFFF',
+    cardAlt: isDark ? '#2C2C2E' : '#F0F0F0',
+    input: isDark ? '#2C2C2E' : '#E8E8E8',
+    separator: isDark ? '#2C2C2E' : '#E0E0E0',
+    accent: '#22C55E',
+    accentOrange: '#FF6B35',
+    accentYellowGreen: '#A3E635',
+    text: isDark ? '#FFFFFF' : '#1A1A1A',
+    textSecondary: isDark ? '#8E8E93' : '#666666',
+    textTertiary: isDark ? '#636366' : '#999999',
+    cta: '#F5F5DC',
+    ctaText: '#000000',
+    tagBlueBg: isDark ? '#1E3A5F' : '#DBEAFE',
+    tagBlueText: '#3B82F6',
+    tagGreenBg: isDark ? '#1A3A2A' : '#DCFCE7',
+    tagGreenText: '#22C55E',
+    sliderActive: '#F59E0B',
+    sliderInactive: isDark ? '#374151' : '#D1D5DB',
+    likeActive: '#FF3B30',
+    tabBarBackground: isDark ? '#000000' : '#FFFFFF',
+    tabBarBorder: isDark ? '#1C1C1E' : '#E0E0E0',
+    tabIconInactive: '#A0A0A0',
+    tabIconActive: isDark ? '#FFFFFF' : '#000000',
+  };
+}

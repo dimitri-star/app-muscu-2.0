@@ -1,1070 +1,1940 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, Alert, Animated, Modal, Vibration,
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Platform,
+  StatusBar,
+  Alert,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from '../../constants/colors';
-import { useWorkoutStore } from '../../store';
-import { exercisesDB } from '../../constants/mockData';
-import type { WorkoutExercise, WorkoutSet, Exercise } from '../../constants/mockData';
+import { useWorkoutStore, useNutritionStore, useWaterStore } from '../../store';
+import { recentWorkouts, weeklyProgram, exercisesDB } from '../../constants/mockData';
+import type { WorkoutExercise, Exercise } from '../../constants/mockData';
+import StartWorkoutModal from '../../components/StartWorkoutModal';
+import ExerciseSearchModal from '../../components/ExerciseSearchModal';
+import SaveWorkoutModal from '../../components/SaveWorkoutModal';
+import CustomWaterModal from '../../components/CustomWaterModal';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmt(seconds: number): string {
+function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
-  if (h > 0) return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  if (h > 0) {
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function fmtRest(s: number): string {
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  if (m > 0 && sec > 0) return `${m}min ${sec}s`;
-  if (m > 0) return `${m}min`;
-  return `${s}s`;
-}
-
-// ─── Tab Bar ──────────────────────────────────────────────────────────────────
-
-function TabBar({ active, onChange }: { active: 'seance' | 'chrono'; onChange: (t: 'seance' | 'chrono') => void }) {
-  return (
-    <View style={tabSt.bar}>
-      {(['seance', 'chrono'] as const).map((tab) => (
-        <TouchableOpacity
-          key={tab}
-          style={[tabSt.tab, active === tab && tabSt.active]}
-          onPress={() => onChange(tab)}
-          activeOpacity={0.7}
-        >
-          <Text style={[tabSt.label, active === tab && tabSt.labelActive]}>
-            {tab === 'seance' ? '💪 Séance' : '⏱ Chrono repos'}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
+// Map exercise name to Exercise object from DB, or create fallback
+function resolveExercise(nameWithSets: string): Exercise {
+  // Extract the name part (before the sets notation like "4x6")
+  const name = nameWithSets.replace(/\s+\d+[x×]\d+(-\d+)?$/, '').trim();
+  const found = exercisesDB.find(
+    (e) => e.name.toLowerCase() === name.toLowerCase()
   );
+  if (found) return found;
+  return {
+    id: `custom_${Date.now()}_${Math.random()}`,
+    name,
+    muscleGroup: 'Autre',
+    category: 'Compound',
+    equipment: 'Autre',
+  };
 }
 
-const tabSt = StyleSheet.create({
-  bar: {
-    flexDirection: 'row', backgroundColor: Colors.card, borderRadius: 14, padding: 4,
-    marginHorizontal: 16, marginTop: 10, borderWidth: 1, borderColor: Colors.border,
-  },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 11 },
-  active: {
-    backgroundColor: Colors.background,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
-  },
-  label: { color: Colors.textMuted, fontSize: 14, fontWeight: '600' },
-  labelActive: { color: Colors.text, fontWeight: '700' },
-});
+// ─── Sub-tab pill row ─────────────────────────────────────────────────────────
 
-// ─── Rest Overlay (auto, from set check) ─────────────────────────────────────
+type SeanceTab = 'seance' | 'chrono' | 'nutrition' | 'eau' | 'programme';
+const SEANCE_TABS: { key: SeanceTab; label: string }[] = [
+  { key: 'seance', label: 'Seance' },
+  { key: 'chrono', label: 'Chrono' },
+  { key: 'nutrition', label: 'Nutrition' },
+  { key: 'eau', label: 'Eau' },
+  { key: 'programme', label: 'Programme' },
+];
 
-function RestOverlay({ seconds, total, onStop }: { seconds: number; total: number; onStop: () => void }) {
-  const pulse = useRef(new Animated.Value(1)).current;
-  const size = 140; const stroke = 10; const r = (size - stroke) / 2;
-  const circ = 2 * Math.PI * r;
-  const progress = total > 0 ? seconds / total : 0;
-  const offset = circ * (1 - progress);
-  const isLow = seconds <= 10;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.04, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-
-  return (
-    <Animated.View style={[restSt.wrap, { transform: [{ scale: pulse }] }]}>
-      <View style={restSt.box}>
-        <Text style={restSt.label}>REPOS</Text>
-        <View style={{ alignItems: 'center', justifyContent: 'center', width: size, height: size }}>
-          <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
-            <Circle cx={size / 2} cy={size / 2} r={r} stroke={Colors.border} strokeWidth={stroke} fill="none" />
-            <Circle
-              cx={size / 2} cy={size / 2} r={r}
-              stroke={isLow ? Colors.error : Colors.accent}
-              strokeWidth={stroke} fill="none"
-              strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
-            />
-          </Svg>
-          <Text style={[restSt.time, { position: 'absolute', color: isLow ? Colors.error : Colors.text }]}>
-            {fmt(seconds)}
-          </Text>
-        </View>
-        <TouchableOpacity style={restSt.skip} onPress={onStop} activeOpacity={0.7}>
-          <Text style={restSt.skipTxt}>Passer ›</Text>
-        </TouchableOpacity>
-      </View>
-    </Animated.View>
-  );
-}
-
-const restSt = StyleSheet.create({
-  wrap: { position: 'absolute', bottom: 90, left: 16, right: 16, zIndex: 100, alignItems: 'center' },
-  box: {
-    backgroundColor: Colors.background, borderRadius: 24, paddingVertical: 18, paddingHorizontal: 28,
-    alignItems: 'center', borderWidth: 1.5, borderColor: Colors.accent,
-    shadowColor: Colors.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 16,
-    elevation: 12, width: '100%',
-  },
-  label: { color: Colors.accent, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 6 },
-  time: { fontSize: 36, fontWeight: '900', letterSpacing: -1 },
-  skip: { marginTop: 10, backgroundColor: Colors.accentMuted, borderRadius: 20, paddingHorizontal: 24, paddingVertical: 9 },
-  skipTxt: { color: Colors.accent, fontSize: 14, fontWeight: '700' },
-});
-
-// ─── Rest Time Modal ──────────────────────────────────────────────────────────
-
-function RestTimeModal({
-  visible, current, onSave, onClose,
-}: { visible: boolean; current: number; onSave: (s: number) => void; onClose: () => void }) {
-  const [val, setVal] = useState(String(current));
-  const presets = [30, 45, 60, 90, 120, 150, 180, 240, 300];
-
-  return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={rtmSt.overlay}>
-        <View style={rtmSt.box}>
-          <Text style={rtmSt.title}>Temps de repos</Text>
-          <View style={rtmSt.inputRow}>
-            <TextInput
-              style={rtmSt.input}
-              value={val}
-              onChangeText={setVal}
-              keyboardType="number-pad"
-              selectTextOnFocus
-            />
-            <Text style={rtmSt.unit}>secondes</Text>
-          </View>
-          <View style={rtmSt.grid}>
-            {presets.map((p) => (
-              <TouchableOpacity
-                key={p}
-                style={[rtmSt.chip, Number(val) === p && rtmSt.chipActive]}
-                onPress={() => setVal(String(p))}
-                activeOpacity={0.7}
-              >
-                <Text style={[rtmSt.chipTxt, Number(val) === p && rtmSt.chipTxtActive]}>{fmtRest(p)}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View style={rtmSt.btns}>
-            <TouchableOpacity style={rtmSt.cancelBtn} onPress={onClose} activeOpacity={0.7}>
-              <Text style={rtmSt.cancelTxt}>Annuler</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={rtmSt.saveBtn}
-              onPress={() => { onSave(Math.max(10, Number(val) || 90)); onClose(); }}
-              activeOpacity={0.8}
-            >
-              <Text style={rtmSt.saveTxt}>Enregistrer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const rtmSt = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  box: { backgroundColor: Colors.background, borderRadius: 24, padding: 24, width: '100%', borderWidth: 1, borderColor: Colors.border },
-  title: { color: Colors.text, fontSize: 18, fontWeight: '800', marginBottom: 16 },
-  inputRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.card,
-    borderRadius: 14, borderWidth: 1.5, borderColor: Colors.accent, paddingHorizontal: 16, marginBottom: 14,
-  },
-  input: { flex: 1, fontSize: 28, fontWeight: '800', color: Colors.text, paddingVertical: 12 },
-  unit: { color: Colors.textMuted, fontSize: 14 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: Colors.border },
-  chipActive: { borderColor: Colors.accent, backgroundColor: Colors.accentMuted },
-  chipTxt: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
-  chipTxtActive: { color: Colors.accent, fontWeight: '800' },
-  btns: { flexDirection: 'row', gap: 10 },
-  cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
-  cancelTxt: { color: Colors.textSecondary, fontSize: 15, fontWeight: '600' },
-  saveBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: Colors.accent, alignItems: 'center' },
-  saveTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
-});
-
-// ─── Add Exercise Modal ───────────────────────────────────────────────────────
-
-const MUSCLE_GROUPS = ['Tous', 'Poitrine', 'Dos', 'Épaules', 'Biceps', 'Triceps', 'Quadriceps', 'Mollets'];
-
-function AddExerciseModal({ visible, onAdd, onClose }: {
-  visible: boolean;
-  onAdd: (ex: Exercise) => void;
-  onClose: () => void;
+function SubTabBar({
+  active,
+  onPress,
+}: {
+  active: SeanceTab;
+  onPress: (t: SeanceTab) => void;
 }) {
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('Tous');
-
-  const filtered = exercisesDB.filter((ex) => {
-    const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase());
-    const matchGroup = filter === 'Tous' || ex.muscleGroup.toLowerCase().includes(filter.toLowerCase());
-    return matchSearch && matchGroup;
-  });
-
-  const MUSCLE_COLORS: Record<string, string> = {
-    Poitrine: '#4C9FFF', Dos: '#1DB954', Épaules: '#FFB800',
-    Biceps: '#FF4F9A', Triceps: '#FF6B35', Quadriceps: '#FF6B35',
-    'Dos / Ischio': '#1DB954', Mollets: '#7C4DFF',
-  };
-
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={aemSt.overlay}>
-        <View style={aemSt.sheet}>
-          <View style={aemSt.handle} />
-          <Text style={aemSt.title}>Ajouter un exercice</Text>
-
-          {/* Search */}
-          <View style={aemSt.searchBar}>
-            <Text style={{ fontSize: 15 }}>🔍</Text>
-            <TextInput
-              style={aemSt.searchInput}
-              placeholder="Rechercher..."
-              placeholderTextColor={Colors.textMuted}
-              value={search}
-              onChangeText={setSearch}
-              autoFocus
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch('')}>
-                <Text style={{ color: Colors.textMuted, fontSize: 14 }}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Filter chips */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={aemSt.filterScroll}>
-            {MUSCLE_GROUPS.map((g) => (
-              <TouchableOpacity
-                key={g}
-                style={[aemSt.filterChip, filter === g && aemSt.filterChipActive]}
-                onPress={() => setFilter(g)}
-                activeOpacity={0.7}
-              >
-                <Text style={[aemSt.filterTxt, filter === g && aemSt.filterTxtActive]}>{g}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Exercise list */}
-          <ScrollView style={aemSt.list} showsVerticalScrollIndicator={false}>
-            {filtered.length === 0 ? (
-              <Text style={aemSt.empty}>Aucun exercice trouvé.</Text>
-            ) : (
-              filtered.map((ex) => (
-                <TouchableOpacity
-                  key={ex.id}
-                  style={aemSt.exRow}
-                  onPress={() => { onAdd(ex); onClose(); setSearch(''); setFilter('Tous'); }}
-                  activeOpacity={0.7}
-                >
-                  <View style={[aemSt.exDot, { backgroundColor: MUSCLE_COLORS[ex.muscleGroup] ?? Colors.accent }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={aemSt.exName}>{ex.name}</Text>
-                    <Text style={aemSt.exMeta}>{ex.muscleGroup} · {ex.equipment} · {ex.category}</Text>
-                  </View>
-                  <Text style={aemSt.exAdd}>+</Text>
-                </TouchableOpacity>
-              ))
-            )}
-            <View style={{ height: 40 }} />
-          </ScrollView>
-
-          <TouchableOpacity style={aemSt.closeBtn} onPress={onClose} activeOpacity={0.7}>
-            <Text style={aemSt.closeTxt}>Fermer</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const aemSt = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: Colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 20, maxHeight: '90%', borderWidth: 1, borderColor: Colors.border,
-  },
-  handle: { width: 36, height: 4, backgroundColor: Colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
-  title: { color: Colors.text, fontSize: 20, fontWeight: '800', marginBottom: 14 },
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.card,
-    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 4,
-    marginBottom: 12, borderWidth: 1, borderColor: Colors.border, gap: 10,
-  },
-  searchInput: { flex: 1, color: Colors.text, fontSize: 15, paddingVertical: 10 },
-  filterScroll: { marginBottom: 12 },
-  filterChip: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    borderWidth: 1, borderColor: Colors.border, marginRight: 8,
-  },
-  filterChipActive: { borderColor: Colors.accent, backgroundColor: Colors.accentMuted },
-  filterTxt: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' },
-  filterTxtActive: { color: Colors.accent, fontWeight: '700' },
-  list: { maxHeight: 380 },
-  empty: { color: Colors.textMuted, textAlign: 'center', paddingVertical: 30 },
-  exRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  exDot: { width: 10, height: 10, borderRadius: 5 },
-  exName: { color: Colors.text, fontSize: 15, fontWeight: '600' },
-  exMeta: { color: Colors.textMuted, fontSize: 12, marginTop: 2 },
-  exAdd: { color: Colors.accent, fontSize: 22, fontWeight: '800', paddingHorizontal: 4 },
-  closeBtn: {
-    marginTop: 14, paddingVertical: 14, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border, alignItems: 'center',
-  },
-  closeTxt: { color: Colors.textSecondary, fontSize: 15, fontWeight: '600' },
-});
-
-// ─── Set Row ──────────────────────────────────────────────────────────────────
-
-function SetRow({ set, index, exerciseId, restTime }: {
-  set: WorkoutSet; index: number; exerciseId: string; restTime: number;
-}) {
-  const { toggleSetDone, updateSet, removeSet, startRestTimer } = useWorkoutStore();
-
-  const handleToggle = () => {
-    const wasDone = set.done;
-    toggleSetDone(exerciseId, set.id);
-    if (!wasDone) startRestTimer(restTime);
-  };
-
-  return (
-    <View style={[setSt.row, set.done && setSt.rowDone]}>
-      <Text style={setSt.idx}>{index + 1}</Text>
-      <TextInput
-        style={setSt.input}
-        value={String(set.reps)}
-        keyboardType="number-pad"
-        onChangeText={(v) => updateSet(exerciseId, set.id, 'reps', Number(v) || 0)}
-        placeholderTextColor={Colors.textMuted}
-        selectTextOnFocus
-      />
-      <TextInput
-        style={setSt.input}
-        value={set.weight === 0 ? '' : String(set.weight)}
-        placeholder="—"
-        keyboardType="decimal-pad"
-        onChangeText={(v) => updateSet(exerciseId, set.id, 'weight', parseFloat(v) || 0)}
-        placeholderTextColor={Colors.textMuted}
-        selectTextOnFocus
-      />
-      <TouchableOpacity
-        style={[setSt.check, set.done && setSt.checkDone]}
-        onPress={handleToggle}
-        activeOpacity={0.7}
-      >
-        <Text style={[setSt.checkTxt, set.done && { color: '#fff' }]}>{set.done ? '✓' : '○'}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => removeSet(exerciseId, set.id)} style={setSt.del} activeOpacity={0.7}>
-        <Text style={setSt.delTxt}>✕</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-const setSt = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, borderRadius: 6, paddingHorizontal: 0 },
-  rowDone: { backgroundColor: 'rgba(29,185,84,0.06)' },
-  idx: { color: Colors.textMuted, fontSize: 11, fontWeight: '700', width: 18, textAlign: 'center' },
-  input: {
-    flex: 1, minWidth: 0, color: Colors.text, fontSize: 13, fontWeight: '600', textAlign: 'center',
-    backgroundColor: Colors.inputBackground, borderRadius: 6, paddingVertical: 5,
-    marginHorizontal: 2, borderWidth: 1, borderColor: Colors.border,
-  },
-  check: {
-    width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: Colors.border,
-    alignItems: 'center', justifyContent: 'center', marginLeft: 2,
-  },
-  checkDone: { backgroundColor: Colors.accent, borderColor: Colors.accent },
-  checkTxt: { color: Colors.textMuted, fontSize: 11, fontWeight: '800' },
-  del: { padding: 2, marginLeft: 0, minWidth: 24, alignItems: 'center', justifyContent: 'center' },
-  delTxt: { color: Colors.textMuted, fontSize: 10 },
-});
-
-// ─── Exercise Card ────────────────────────────────────────────────────────────
-
-function ExerciseCard({ exercise }: { exercise: WorkoutExercise }) {
-  const { addSet, removeExercise, updateRestTime, updateNotes } = useWorkoutStore();
-  const [showRestModal, setShowRestModal] = useState(false);
-  const [showNotes, setShowNotes] = useState(false);
-  const [notesVal, setNotesVal] = useState(exercise.notes ?? '');
-
-  const done = exercise.sets.filter((s) => s.done).length;
-  const total = exercise.sets.length;
-  const allDone = done === total && total > 0;
-
-  const MUSCLE_COLORS: Record<string, string> = {
-    Poitrine: '#4C9FFF', Dos: '#1DB954', Épaules: '#FFB800',
-    Biceps: '#FF4F9A', Triceps: '#FF6B35', Quadriceps: '#FF6B35',
-    'Dos / Ischio': '#1DB954', Mollets: '#7C4DFF',
-  };
-  const muscleColor = MUSCLE_COLORS[exercise.exercise.muscleGroup] ?? Colors.accent;
-
-  return (
-    <View style={[exSt.card, allDone && exSt.cardDone]}>
-      {/* Header: gauche = nom + meta (tronqués), droite = repos + poubelle (toujours visibles) */}
-      <View style={exSt.header}>
-        <View style={exSt.headerLeft}>
-          <View style={exSt.nameRow}>
-            <View style={[exSt.muscleDot, { backgroundColor: muscleColor }]} />
-            <Text style={exSt.name} numberOfLines={1}>{exercise.exercise.name}</Text>
-          </View>
-          <Text style={exSt.meta} numberOfLines={1}>
-            {exercise.exercise.muscleGroup} · {exercise.exercise.equipment}
-            {' · '}
-            <Text style={[exSt.progress, allDone && exSt.progressDone]}>
-              {done}/{total} séries{allDone ? ' ✓' : ''}
-            </Text>
-          </Text>
-        </View>
-
-        <View style={exSt.headerRight}>
-          <TouchableOpacity style={exSt.restBadge} onPress={() => setShowRestModal(true)} activeOpacity={0.7}>
-            <Text style={exSt.restTxt} numberOfLines={1}>⏱ {fmtRest(exercise.restTime)}</Text>
-          </TouchableOpacity>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={subStyles.row}
+      style={subStyles.container}
+    >
+      {SEANCE_TABS.map((tab) => {
+        const isActive = active === tab.key;
+        return (
           <TouchableOpacity
-            style={exSt.deleteBtn}
-            onPress={() =>
-              Alert.alert('Supprimer ?', exercise.exercise.name, [
-                { text: 'Annuler', style: 'cancel' },
-                { text: 'Supprimer', style: 'destructive', onPress: () => removeExercise(exercise.id) },
-              ])
-            }
+            key={tab.key}
+            style={[subStyles.pill, isActive && subStyles.pillActive]}
+            onPress={() => onPress(tab.key)}
             activeOpacity={0.7}
           >
-            <Text style={exSt.deleteTxt}>🗑</Text>
+            <Text style={[subStyles.pillText, isActive && subStyles.pillTextActive]}>
+              {tab.label}
+            </Text>
           </TouchableOpacity>
-        </View>
-      </View>
+        );
+      })}
+    </ScrollView>
+  );
+}
 
-      {/* Table header */}
-      <View style={exSt.tableHead}>
-        <Text style={[exSt.th, exSt.thNum]}>#</Text>
-        <Text style={[exSt.th, exSt.thReps]}>Réps</Text>
-        <Text style={[exSt.th, exSt.thPoids]}>Poids</Text>
-        <Text style={[exSt.th, exSt.thCheck]}>✓</Text>
-        <View style={exSt.thDel} />
-      </View>
+const subStyles = StyleSheet.create({
+  container: {
+    flexGrow: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.separator,
+  },
+  row: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  pill: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+  },
+  pillActive: {
+    backgroundColor: Colors.text,
+  },
+  pillText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+  },
+  pillTextActive: {
+    color: Colors.background,
+    fontWeight: '600',
+  },
+});
 
-      {/* Sets */}
-      {exercise.sets.map((set, i) => (
-        <SetRow key={set.id} set={set} index={i} exerciseId={exercise.id} restTime={exercise.restTime} />
-      ))}
+// ─── TAB: SEANCE ─────────────────────────────────────────────────────────────
 
-      {/* Add set */}
-      <TouchableOpacity style={exSt.addSet} onPress={() => addSet(exercise.id)} activeOpacity={0.7}>
-        <Text style={exSt.addSetTxt}>+ Ajouter une série</Text>
-      </TouchableOpacity>
+function ExerciseCard({ ex }: { ex: WorkoutExercise }) {
+  const { toggleSetDone, updateSet, addSet } = useWorkoutStore();
+  const [expanded, setExpanded] = useState(true);
+  const doneSets = ex.sets.filter((s) => s.done).length;
 
-      {/* Notes toggle */}
+  return (
+    <View style={seanceStyles.exCard}>
+      {/* Header - tappable to collapse */}
       <TouchableOpacity
-        style={exSt.notesToggle}
-        onPress={() => setShowNotes((v) => !v)}
+        style={seanceStyles.exHeader}
+        onPress={() => setExpanded((e) => !e)}
         activeOpacity={0.7}
       >
-        <Text style={exSt.notesToggletxt}>
-          📝 Notes{exercise.notes ? ` · ${exercise.notes.slice(0, 30)}${exercise.notes.length > 30 ? '…' : ''}` : ''}
-        </Text>
-        <Text style={exSt.chevron}>{showNotes ? '▲' : '▼'}</Text>
+        <Text style={seanceStyles.exName}>{ex.exercise.name}</Text>
+        <View style={seanceStyles.progressDots}>
+          {ex.sets.map((s) => (
+            <View
+              key={s.id}
+              style={[
+                seanceStyles.dot,
+                s.done ? seanceStyles.dotDone : seanceStyles.dotPending,
+              ]}
+            />
+          ))}
+        </View>
+        <Ionicons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={16}
+          color={Colors.textTertiary}
+          style={{ marginLeft: 6 }}
+        />
       </TouchableOpacity>
 
-      {showNotes && (
-        <TextInput
-          style={exSt.notesInput}
-          placeholder="Conseils, sensations, PR..."
-          placeholderTextColor={Colors.textMuted}
-          value={notesVal}
-          onChangeText={(v) => { setNotesVal(v); updateNotes(exercise.id, v); }}
-          multiline
-          numberOfLines={2}
+      {expanded && (
+        <>
+          {/* Table header */}
+          <View style={seanceStyles.tableHeader}>
+            <Text style={[seanceStyles.colHead, seanceStyles.colNum]}>#</Text>
+            <Text style={[seanceStyles.colHead, seanceStyles.colInput]}>Reps</Text>
+            <Text style={[seanceStyles.colHead, seanceStyles.colInput]}>Poids</Text>
+            <Text style={[seanceStyles.colHead, seanceStyles.colCheck]}>Fait</Text>
+          </View>
+
+          {/* Sets */}
+          {ex.sets.map((s, i) => (
+            <View key={s.id} style={seanceStyles.setRow}>
+              <Text style={[seanceStyles.setNum, seanceStyles.colNum]}>{i + 1}</Text>
+              <TextInput
+                style={[seanceStyles.setInput, seanceStyles.colInput]}
+                value={String(s.reps)}
+                keyboardType="numeric"
+                onChangeText={(v) =>
+                  updateSet(ex.id, s.id, 'reps', parseInt(v) || 0)
+                }
+                placeholderTextColor={Colors.textTertiary}
+              />
+              <TextInput
+                style={[seanceStyles.setInput, seanceStyles.colInput]}
+                value={String(s.weight)}
+                keyboardType="numeric"
+                onChangeText={(v) =>
+                  updateSet(ex.id, s.id, 'weight', parseFloat(v) || 0)
+                }
+                placeholderTextColor={Colors.textTertiary}
+              />
+              <TouchableOpacity
+                style={[seanceStyles.colCheck, { alignItems: 'center' }]}
+                onPress={() => toggleSetDone(ex.id, s.id)}
+              >
+                <View style={[seanceStyles.checkbox, s.done && seanceStyles.checkboxDone]}>
+                  {s.done && (
+                    <Ionicons name="checkmark" size={14} color={Colors.background} />
+                  )}
+                </View>
+              </TouchableOpacity>
+            </View>
+          ))}
+
+          {/* Add set */}
+          <TouchableOpacity
+            style={seanceStyles.addSetBtn}
+            onPress={() => addSet(ex.id)}
+          >
+            <Ionicons name="add" size={16} color={Colors.text} />
+            <Text style={seanceStyles.addSetText}>Ajouter une serie</Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </View>
+  );
+}
+
+const seanceStyles = StyleSheet.create({
+  exCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  exHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 8,
+    gap: 10,
+  },
+  exName: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  progressDots: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  dotDone: {
+    backgroundColor: Colors.accent,
+  },
+  dotPending: {
+    backgroundColor: Colors.textTertiary,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingHorizontal: 14,
+    paddingBottom: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.separator,
+  },
+  colHead: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  colNum: {
+    width: 28,
+    textAlign: 'center',
+  },
+  colInput: {
+    flex: 1,
+    textAlign: 'center',
+  },
+  colCheck: {
+    width: 44,
+  },
+  setRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  setNum: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  setInput: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    backgroundColor: Colors.input,
+    borderRadius: 8,
+    marginHorizontal: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    textAlign: 'center',
+  },
+  checkbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: Colors.textTertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxDone: {
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+  },
+  addSetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.separator,
+    marginHorizontal: 14,
+    marginBottom: 4,
+  },
+  addSetText: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+});
+
+// Program day picker modal (inline)
+function ProgramDayPicker({
+  visible,
+  onClose,
+  onSelectDay,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSelectDay: (dayIndex: number) => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={dayPickerStyles.overlay} onPress={onClose}>
+        <Pressable style={dayPickerStyles.sheet} onPress={() => {}}>
+          <View style={dayPickerStyles.handle} />
+          <Text style={dayPickerStyles.title}>Choisir un jour</Text>
+          <ScrollView>
+            {weeklyProgram.map((day, index) => (
+              <TouchableOpacity
+                key={day.day}
+                style={dayPickerStyles.dayRow}
+                onPress={() => {
+                  onSelectDay(index);
+                  onClose();
+                }}
+              >
+                <View style={[dayPickerStyles.dayBadge, { backgroundColor: day.color + '33' }]}>
+                  <Text style={[dayPickerStyles.dayShort, { color: day.color }]}>{day.shortDay}</Text>
+                </View>
+                <View style={dayPickerStyles.dayInfo}>
+                  <Text style={dayPickerStyles.dayLabel}>{day.label}</Text>
+                  <Text style={dayPickerStyles.dayMeta}>
+                    {day.type === 'rest' ? 'Repos' : `${day.exercises.length} exercices`}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <TouchableOpacity style={dayPickerStyles.cancelBtn} onPress={onClose}>
+            <Text style={dayPickerStyles.cancelText}>Annuler</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const dayPickerStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 40,
+    maxHeight: '80%',
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.separator,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    color: Colors.text,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  dayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.separator,
+    gap: 12,
+  },
+  dayBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayShort: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dayInfo: {
+    flex: 1,
+  },
+  dayLabel: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  dayMeta: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+  },
+  cancelBtn: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  cancelText: {
+    color: Colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+});
+
+function SeanceContent() {
+  const {
+    isActive,
+    timerSeconds,
+    workoutName,
+    exercises,
+    restTimerActive,
+    restTimerSeconds,
+    restTimerTotal,
+    startWorkout,
+    endWorkout,
+    addExercise,
+    clearExercises,
+    tickTimer,
+    tickRestTimer,
+    stopRestTimer,
+  } = useWorkoutStore();
+
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [showStartModal, setShowStartModal] = useState(false);
+  const [showDayPicker, setShowDayPicker] = useState(false);
+  const [showExerciseModal, setShowExerciseModal] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+
+  // Main workout timer
+  useEffect(() => {
+    if (isActive) {
+      timerRef.current = setInterval(() => tickTimer(), 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isActive]);
+
+  // Rest timer
+  useEffect(() => {
+    if (restTimerActive) {
+      restRef.current = setInterval(() => tickRestTimer(), 1000);
+    } else {
+      if (restRef.current) clearInterval(restRef.current);
+    }
+    return () => {
+      if (restRef.current) clearInterval(restRef.current);
+    };
+  }, [restTimerActive]);
+
+  const handleStartEmpty = () => {
+    clearExercises();
+    startWorkout();
+    setShowStartModal(false);
+  };
+
+  const handleStartFromProgram = () => {
+    setShowStartModal(false);
+    setShowDayPicker(true);
+  };
+
+  const handleSelectDay = (dayIndex: number) => {
+    const day = weeklyProgram[dayIndex];
+    clearExercises();
+    startWorkout();
+    // Add exercises from the program day
+    if (day.type !== 'rest') {
+      day.exercises.forEach((exStr) => {
+        const exercise = resolveExercise(exStr);
+        addExercise(exercise);
+      });
+    }
+  };
+
+  const handleExerciseSelect = (item: { id: string; name: string; muscle: string; equipment: string }) => {
+    const exercise: Exercise = {
+      id: item.id,
+      name: item.name,
+      muscleGroup: item.muscle,
+      category: 'Compound',
+      equipment: item.equipment,
+    };
+    addExercise(exercise);
+  };
+
+  const handleSave = () => {
+    setShowSaveModal(false);
+    endWorkout();
+    Alert.alert('Seance enregistree', 'Bravo, ta seance a ete enregistree avec succes !');
+  };
+
+  if (!isActive) {
+    return (
+      <>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={activeStyles.idleContainer}>
+          <Text style={activeStyles.idleTitle}>Seance</Text>
+          <TouchableOpacity
+            style={activeStyles.ctaBtn}
+            onPress={() => setShowStartModal(true)}
+          >
+            <Text style={activeStyles.ctaBtnText}>Commencer une seance</Text>
+          </TouchableOpacity>
+
+          <Text style={activeStyles.sectionTitle}>Dernieres seances</Text>
+          {recentWorkouts.map((w) => (
+            <View key={w.id} style={activeStyles.historyCard}>
+              <Text style={activeStyles.historyDate}>{w.date}</Text>
+              <Text style={activeStyles.historyName}>{w.name}</Text>
+              <View style={activeStyles.historyMeta}>
+                <Text style={activeStyles.historyMetaText}>
+                  {(w.totalVolume / 1000).toFixed(1)} t
+                </Text>
+                <Text style={activeStyles.historyMetaSep}>&middot;</Text>
+                <Text style={activeStyles.historyMetaText}>{w.duration} min</Text>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+
+        <StartWorkoutModal
+          visible={showStartModal}
+          onClose={() => setShowStartModal(false)}
+          onStartEmpty={handleStartEmpty}
+          onStartFromProgram={handleStartFromProgram}
         />
+
+        <ProgramDayPicker
+          visible={showDayPicker}
+          onClose={() => setShowDayPicker(false)}
+          onSelectDay={handleSelectDay}
+        />
+      </>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Active header */}
+      <View style={activeStyles.activeHeader}>
+        <TouchableOpacity style={activeStyles.roundBtn} onPress={endWorkout}>
+          <Ionicons name="close" size={20} color={Colors.text} />
+        </TouchableOpacity>
+        <View style={activeStyles.timerCenter}>
+          <Ionicons name="timer-outline" size={14} color={Colors.accentOrange} />
+          <Text style={activeStyles.timer}>{formatTime(timerSeconds)}</Text>
+        </View>
+        <TouchableOpacity
+          style={activeStyles.roundBtn}
+          onPress={() => setShowSaveModal(true)}
+        >
+          <Ionicons name="checkmark" size={20} color={Colors.text} />
+        </TouchableOpacity>
+      </View>
+
+      <Text style={activeStyles.workoutName}>{workoutName}</Text>
+
+      {/* Exercises */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={activeStyles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {exercises.map((ex) => (
+          <ExerciseCard key={ex.id} ex={ex} />
+        ))}
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {/* Add exercise button */}
+      <View style={activeStyles.addExContainer}>
+        <TouchableOpacity
+          style={activeStyles.addExBtn}
+          onPress={() => setShowExerciseModal(true)}
+        >
+          <Ionicons name="add" size={18} color={Colors.ctaText} />
+          <Text style={activeStyles.addExText}>Ajouter un exercice</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Rest timer bubble */}
+      {restTimerActive && (
+        <TouchableOpacity
+          style={activeStyles.restBubble}
+          onPress={stopRestTimer}
+        >
+          <Text style={activeStyles.restBubbleTime}>
+            {formatTime(restTimerSeconds)}
+          </Text>
+          <Text style={activeStyles.restBubbleLabel}>REPOS</Text>
+        </TouchableOpacity>
       )}
 
-      <RestTimeModal
-        visible={showRestModal}
-        current={exercise.restTime}
-        onSave={(s) => updateRestTime(exercise.id, s)}
-        onClose={() => setShowRestModal(false)}
+      <ExerciseSearchModal
+        visible={showExerciseModal}
+        onClose={() => setShowExerciseModal(false)}
+        onSelect={handleExerciseSelect}
+      />
+
+      <SaveWorkoutModal
+        visible={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+        onSave={handleSave}
+        workoutData={{
+          name: workoutName,
+          duration: timerSeconds,
+          exercises,
+          startTime: new Date().toISOString(),
+        }}
       />
     </View>
   );
 }
 
-const exSt = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.card, borderRadius: 14, padding: 10,
-    marginBottom: 10, borderWidth: 1, borderColor: Colors.border,
-    maxWidth: '100%',
+const activeStyles = StyleSheet.create({
+  // Idle
+  idleContainer: {
+    padding: 16,
   },
-  cardDone: { borderColor: Colors.accent, borderWidth: 1.5 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
-  headerLeft: { flex: 1, minWidth: 0 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
-  muscleDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
-  name: { color: Colors.text, fontSize: 15, fontWeight: '700', flex: 1 },
-  meta: { color: Colors.textSecondary, fontSize: 11, marginLeft: 14 },
-  progress: { color: Colors.textSecondary, fontWeight: '600' },
-  progressDone: { color: Colors.accent },
-  restBadge: {
-    backgroundColor: Colors.inputBackground, paddingHorizontal: 6, paddingVertical: 4,
-    borderRadius: 14, borderWidth: 1, borderColor: Colors.border, minWidth: 0,
+  idleTitle: {
+    color: Colors.text,
+    fontSize: 26,
+    fontWeight: '700',
+    marginBottom: 16,
   },
-  restTxt: { color: Colors.textSecondary, fontSize: 10, fontWeight: '600' },
-  deleteBtn: { padding: 4 },
-  deleteTxt: { fontSize: 13 },
-  tableHead: {
-    flexDirection: 'row', alignItems: 'center', marginBottom: 2,
-    paddingHorizontal: 0, paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  ctaBtn: {
+    backgroundColor: Colors.cta,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 28,
   },
-  th: { color: Colors.textMuted, fontSize: 9, fontWeight: '700', textAlign: 'center', letterSpacing: 0.2 },
-  thNum: { width: 18 },
-  thReps: { flex: 1, minWidth: 0 },
-  thPoids: { flex: 1, minWidth: 0 },
-  thCheck: { width: 26, marginLeft: 2 },
-  thDel: { width: 24 },
-  addSet: {
-    marginTop: 6, paddingVertical: 8, borderRadius: 10,
-    borderWidth: 1, borderColor: Colors.border, borderStyle: 'dashed', alignItems: 'center',
+  ctaBtnText: {
+    color: Colors.ctaText,
+    fontSize: 16,
+    fontWeight: '700',
   },
-  addSetTxt: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
-  notesToggle: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginTop: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: Colors.border,
+  sectionTitle: {
+    color: Colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
   },
-  notesToggletxt: { color: Colors.textMuted, fontSize: 12, flex: 1 },
-  chevron: { color: Colors.textMuted, fontSize: 10 },
-  notesInput: {
-    marginTop: 8, backgroundColor: Colors.inputBackground, borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, color: Colors.text,
-    fontSize: 13, borderWidth: 1, borderColor: Colors.border,
+  historyCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  historyDate: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  historyName: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  historyMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  historyMetaText: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+  },
+  historyMetaSep: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+  },
+
+  // Active
+  activeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  roundBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timer: {
+    color: Colors.accentOrange,
+    fontSize: 20,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  workoutName: {
+    color: Colors.text,
+    fontSize: 20,
+    fontWeight: '700',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  addExContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 16 : 12,
+    paddingTop: 10,
+    backgroundColor: Colors.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.separator,
+  },
+  addExBtn: {
+    backgroundColor: Colors.cta,
+    borderRadius: 12,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  addExText: {
+    color: Colors.ctaText,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  restBubble: {
+    position: 'absolute',
+    bottom: 90,
+    right: 20,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.accentYellowGreen,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  restBubbleTime: {
+    color: Colors.background,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  restBubbleLabel: {
+    color: Colors.background,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });
 
-// ─── Chrono Tab ───────────────────────────────────────────────────────────────
+// ─── TAB: CHRONO ─────────────────────────────────────────────────────────────
 
-interface SavedTimer { id: string; label: string; seconds: number }
-
-const PRESETS = [
-  { label: '30s', seconds: 30 }, { label: '45s', seconds: 45 },
-  { label: '1 min', seconds: 60 }, { label: '1:30', seconds: 90 },
-  { label: '2 min', seconds: 120 }, { label: '2:30', seconds: 150 },
-  { label: '3 min', seconds: 180 }, { label: '4 min', seconds: 240 },
+type ChronoMode = 'chrono' | 'timer' | 'repos' | 'tabata';
+const TIMER_PRESETS = [
+  { label: '30s', seconds: 30 },
+  { label: '1 min', seconds: 60 },
+  { label: '1:30', seconds: 90 },
+  { label: '2 min', seconds: 120 },
+  { label: '3 min', seconds: 180 },
   { label: '5 min', seconds: 300 },
 ];
 
-function ChronoTab() {
-  const [total, setTotal] = useState(90);
-  const [remaining, setRemaining] = useState(90);
-  const [running, setRunning] = useState(false);
-  const [finished, setFinished] = useState(false);
-  const iRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pulse = useRef(new Animated.Value(1)).current;
+interface LapEntry {
+  id: number;
+  time: string;
+  split: string;
+}
 
-  const [showCustom, setShowCustom] = useState(false);
-  const [cMin, setCMin] = useState('1');
-  const [cSec, setCSec] = useState('30');
-  const [cLabel, setCLabel] = useState('');
-  const [saved, setSaved] = useState<SavedTimer[]>([
-    { id: 's1', label: 'Squat lourds', seconds: 240 },
-    { id: 's2', label: 'Isolation', seconds: 60 },
-  ]);
-  const [history, setHistory] = useState<string[]>([]);
+function ChronoContent() {
+  const [mode, setMode] = useState<ChronoMode>('chrono');
+
+  // Stopwatch
+  const [swRunning, setSwRunning] = useState(false);
+  const [swSeconds, setSwSeconds] = useState(0);
+  const [laps, setLaps] = useState<LapEntry[]>([]);
+  const swRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastLapRef = useRef(0);
 
   useEffect(() => {
-    if (finished) {
-      Vibration.vibrate([0, 400, 200, 400]);
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, { toValue: 1.06, duration: 400, useNativeDriver: true }),
-          Animated.timing(pulse, { toValue: 1, duration: 400, useNativeDriver: true }),
-        ])
-      ).start();
+    if (swRunning) {
+      swRef.current = setInterval(() => setSwSeconds((s) => s + 1), 1000);
     } else {
-      pulse.setValue(1);
+      if (swRef.current) clearInterval(swRef.current);
     }
-  }, [finished]);
+    return () => { if (swRef.current) clearInterval(swRef.current); };
+  }, [swRunning]);
 
-  const play = () => {
-    if (finished) return;
-    setRunning(true);
-    iRef.current = setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) { clearInterval(iRef.current!); setRunning(false); setFinished(true); return 0; }
-        return r - 1;
-      });
-    }, 1000);
+  const handleLap = () => {
+    const split = swSeconds - lastLapRef.current;
+    lastLapRef.current = swSeconds;
+    setLaps((prev) => [
+      { id: Date.now(), time: formatTime(swSeconds), split: formatTime(split) },
+      ...prev,
+    ]);
   };
 
-  const pause = () => { setRunning(false); if (iRef.current) clearInterval(iRef.current); };
-
-  const reset = (newTotal?: number) => {
-    pause();
-    const t = newTotal ?? total;
-    setTotal(t); setRemaining(t); setFinished(false);
+  const handleSwReset = () => {
+    setSwRunning(false);
+    setSwSeconds(0);
+    setLaps([]);
+    lastLapRef.current = 0;
   };
 
-  const selectPreset = (s: number) => reset(s);
+  // Timer / Repos
+  const [timerPreset, setTimerPreset] = useState(60);
+  const [timerRemaining, setTimerRemaining] = useState(60);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const adjust = (delta: number) => {
-    const newTotal = Math.max(10, total + delta);
-    setTotal(newTotal);
-    if (!running) setRemaining((r) => Math.max(0, Math.min(r + delta, newTotal)));
-  };
+  const reposDefault = 90;
+  const [reposRemaining, setReposRemaining] = useState(reposDefault);
+  const [reposRunning, setReposRunning] = useState(false);
+  const reposRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const handleFinished = () => {
-    setHistory((h) => [`${fmtRest(total)} ✓`, ...h.slice(0, 9)]);
-    reset();
-  };
+  useEffect(() => {
+    if (timerRunning) {
+      timerRef.current = setInterval(() => {
+        setTimerRemaining((s) => {
+          if (s <= 1) {
+            setTimerRunning(false);
+            return 0;
+          }
+          return s - 1;
+        });
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [timerRunning]);
 
-  const saveCustom = () => {
-    const t = (parseInt(cMin, 10) || 0) * 60 + (parseInt(cSec, 10) || 0);
-    if (t < 5 || t > 3600) { Alert.alert('Durée invalide', '5s minimum, 60min maximum'); return; }
-    const label = cLabel.trim() || fmtRest(t);
-    setSaved((p) => [...p, { id: `c_${Date.now()}`, label, seconds: t }]);
-    reset(t);
-    setShowCustom(false);
-    setCLabel(''); setCMin('1'); setCSec('30');
-  };
+  useEffect(() => {
+    if (reposRunning) {
+      reposRef.current = setInterval(() => {
+        setReposRemaining((s) => {
+          if (s <= 1) {
+            setReposRunning(false);
+            return 0;
+          }
+          return s - 1;
+        });
+      }, 1000);
+    } else {
+      if (reposRef.current) clearInterval(reposRef.current);
+    }
+    return () => { if (reposRef.current) clearInterval(reposRef.current); };
+  }, [reposRunning]);
 
-  // SVG ring
-  const SIZE = 210; const STROKE = 14; const R = (SIZE - STROKE) / 2;
-  const CIRC = 2 * Math.PI * R;
-  const progress = total > 0 ? remaining / total : 0;
-  const dashOffset = CIRC * (1 - progress);
-  const isLow = remaining <= 10 && remaining > 0;
-  const ringColor = finished ? Colors.accent : isLow ? Colors.error : '#4C9FFF';
-
-  const mm = Math.floor(remaining / 60);
-  const ss = remaining % 60;
+  const CHRONO_MODES: { key: ChronoMode; label: string }[] = [
+    { key: 'chrono', label: 'Chrono' },
+    { key: 'timer', label: 'Timer' },
+    { key: 'repos', label: 'Repos' },
+    { key: 'tabata', label: 'Tabata' },
+  ];
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={chSt.scroll}>
-
-      {/* ── Horloge ── */}
-      <View style={chSt.clockCard}>
-        <Animated.View style={{ transform: [{ scale: pulse }], alignItems: 'center' }}>
-          <View style={{ width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' }}>
-            <Svg width={SIZE} height={SIZE} style={{ transform: [{ rotate: '-90deg' }] }}>
-              <Circle cx={SIZE / 2} cy={SIZE / 2} r={R} stroke={Colors.border} strokeWidth={STROKE} fill="none" />
-              <Circle
-                cx={SIZE / 2} cy={SIZE / 2} r={R} stroke={ringColor} strokeWidth={STROKE} fill="none"
-                strokeDasharray={CIRC} strokeDashoffset={dashOffset} strokeLinecap="round"
-              />
-            </Svg>
-            <View style={{ position: 'absolute', alignItems: 'center' }}>
-              {finished ? (
-                <>
-                  <Text style={{ fontSize: 44 }}>✅</Text>
-                  <Text style={{ color: Colors.accent, fontSize: 18, fontWeight: '800', marginTop: 8 }}>Terminé !</Text>
-                  <TouchableOpacity style={chSt.finBtn} onPress={handleFinished} activeOpacity={0.8}>
-                    <Text style={chSt.finBtnTxt}>Recommencer</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <Text style={[chSt.clockTime, { color: isLow ? Colors.error : Colors.text }]}>
-                    {mm > 0 ? `${mm}:${ss.toString().padStart(2, '0')}` : ss}
-                  </Text>
-                  <Text style={chSt.clockSub}>
-                    {running ? 'en cours' : remaining === total ? 'prêt' : 'en pause'}
-                  </Text>
-                  <Text style={chSt.clockTotal}>/ {fmtRest(total)}</Text>
-                </>
-              )}
-            </View>
-          </View>
-        </Animated.View>
-
-        {/* Adjust */}
-        <View style={chSt.adjRow}>
-          {[{ l: '−15s', d: -15 }, { l: '−30s', d: -30 }, { l: '+30s', d: 30 }, { l: '+1min', d: 60 }].map((b) => (
-            <TouchableOpacity key={b.l} style={chSt.adjBtn} onPress={() => adjust(b.d)} activeOpacity={0.7}>
-              <Text style={chSt.adjTxt}>{b.l}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Controls */}
-        <View style={chSt.ctrlRow}>
-          <TouchableOpacity style={chSt.resetBtn} onPress={() => reset()} activeOpacity={0.7}>
-            <Text style={chSt.resetTxt}>↺ Reset</Text>
-          </TouchableOpacity>
-          {!finished && (
-            <TouchableOpacity
-              style={[chSt.playBtn, running && chSt.pauseBtn]}
-              onPress={running ? pause : play}
-              activeOpacity={0.8}
-            >
-              <Text style={chSt.playTxt}>{running ? '⏸ Pause' : '▶ Démarrer'}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      {/* ── Presets ── */}
-      <View style={chSt.card}>
-        <Text style={chSt.cardTitle}>⚡ Durées prédéfinies</Text>
-        <View style={chSt.grid}>
-          {PRESETS.map((p) => {
-            const sel = p.seconds === total;
-            return (
-              <TouchableOpacity
-                key={p.seconds}
-                style={[chSt.chip, sel && chSt.chipSel]}
-                onPress={() => selectPreset(p.seconds)}
-                activeOpacity={0.7}
-              >
-                <Text style={[chSt.chipTxt, sel && chSt.chipTxtSel]}>{p.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* ── Mes chronomètres ── */}
-      <View style={chSt.card}>
-        <View style={chSt.cardHeader}>
-          <Text style={chSt.cardTitle}>🔖 Mes chronomètres</Text>
-          <TouchableOpacity style={chSt.createBtn} onPress={() => setShowCustom(true)} activeOpacity={0.7}>
-            <Text style={chSt.createTxt}>+ Créer</Text>
-          </TouchableOpacity>
-        </View>
-        {saved.length === 0 ? (
-          <Text style={chSt.empty}>Aucun chronomètre sauvegardé.</Text>
-        ) : saved.map((t) => {
-          const sel = t.seconds === total;
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={chronoStyles.container}>
+      {/* Mode selector */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={chronoStyles.modeRow}
+      >
+        {CHRONO_MODES.map((m) => {
+          const isActive = mode === m.key;
           return (
-            <View key={t.id} style={[chSt.savedRow, sel && chSt.savedRowSel]}>
-              <TouchableOpacity
-                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}
-                onPress={() => selectPreset(t.seconds)}
-                activeOpacity={0.7}
-              >
-                <View style={[chSt.savedDot, sel && { backgroundColor: Colors.accent }]} />
-                <View>
-                  <Text style={[chSt.savedLabel, sel && { color: Colors.accent }]}>{t.label}</Text>
-                  <Text style={chSt.savedDur}>{fmtRest(t.seconds)}</Text>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => Alert.alert('Supprimer ?', t.label, [
-                  { text: 'Annuler', style: 'cancel' },
-                  { text: 'Supprimer', style: 'destructive', onPress: () => setSaved((p) => p.filter((x) => x.id !== t.id)) },
-                ])}
-                style={{ padding: 8 }} activeOpacity={0.7}
-              >
-                <Text style={{ color: Colors.textMuted, fontSize: 14 }}>🗑</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              key={m.key}
+              style={[chronoStyles.modePill, isActive && chronoStyles.modePillActive]}
+              onPress={() => setMode(m.key)}
+            >
+              <Text style={[chronoStyles.modePillText, isActive && chronoStyles.modePillTextActive]}>
+                {m.label}
+              </Text>
+            </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
-      {/* ── Historique ── */}
-      {history.length > 0 && (
-        <View style={chSt.card}>
-          <Text style={chSt.cardTitle}>📋 Historique des repos</Text>
-          {history.map((h, i) => (
-            <View key={i} style={chSt.histRow}>
-              <View style={chSt.histDot} />
-              <Text style={chSt.histTxt}>Repos {h}</Text>
+      {/* Stopwatch */}
+      {mode === 'chrono' && (
+        <View style={chronoStyles.watchContainer}>
+          <Text style={chronoStyles.bigTime}>{formatTime(swSeconds)}</Text>
+          <View style={chronoStyles.btnRow}>
+            <TouchableOpacity
+              style={chronoStyles.grayBtn}
+              onPress={handleSwReset}
+            >
+              <Text style={chronoStyles.grayBtnText}>Reinitialiser</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[chronoStyles.mainBtn, swRunning ? chronoStyles.orangeBtn : chronoStyles.greenBtn]}
+              onPress={() => setSwRunning((r) => !r)}
+            >
+              <Text style={chronoStyles.mainBtnText}>{swRunning ? 'Pause' : 'Demarrer'}</Text>
+            </TouchableOpacity>
+            {swRunning && (
+              <TouchableOpacity style={chronoStyles.grayBtn} onPress={handleLap}>
+                <Text style={chronoStyles.grayBtnText}>Tour</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Laps */}
+          {laps.length > 0 && (
+            <View style={chronoStyles.lapsContainer}>
+              <Text style={chronoStyles.lapsTitle}>Tours</Text>
+              {laps.map((lap, i) => (
+                <View key={lap.id} style={chronoStyles.lapRow}>
+                  <Text style={chronoStyles.lapNum}>Tour {laps.length - i}</Text>
+                  <Text style={chronoStyles.lapSplit}>{lap.split}</Text>
+                  <Text style={chronoStyles.lapTime}>{lap.time}</Text>
+                </View>
+              ))}
             </View>
-          ))}
+          )}
         </View>
       )}
 
-      {/* ── Modal créer chrono ── */}
-      <Modal visible={showCustom} transparent animationType="slide">
-        <View style={cmSt.overlay}>
-          <View style={cmSt.sheet}>
-            <Text style={cmSt.title}>Créer un chronomètre</Text>
-            <Text style={cmSt.fieldLbl}>Nom (optionnel)</Text>
-            <TextInput
-              style={cmSt.input}
-              placeholder="Ex: Squat lourds, Isolation..."
-              placeholderTextColor={Colors.textMuted}
-              value={cLabel}
-              onChangeText={setCLabel}
-            />
-            <Text style={cmSt.fieldLbl}>Durée</Text>
-            <View style={cmSt.durRow}>
-              <View style={cmSt.durField}>
-                <TextInput style={cmSt.durInput} value={cMin} onChangeText={setCMin} keyboardType="number-pad" selectTextOnFocus />
-                <Text style={cmSt.durUnit}>min</Text>
-              </View>
-              <Text style={cmSt.durSep}>:</Text>
-              <View style={cmSt.durField}>
-                <TextInput style={cmSt.durInput} value={cSec} onChangeText={(v) => setCSec(v.slice(0, 2))} keyboardType="number-pad" selectTextOnFocus />
-                <Text style={cmSt.durUnit}>sec</Text>
-              </View>
-            </View>
-            <Text style={[cmSt.fieldLbl, { marginTop: 8 }]}>Raccourcis</Text>
-            <View style={cmSt.qGrid}>
-              {[30, 45, 60, 90, 120, 150, 180, 240, 300].map((s) => (
-                <TouchableOpacity
-                  key={s} style={cmSt.qChip}
-                  onPress={() => { setCMin(String(Math.floor(s / 60))); setCSec(String(s % 60).padStart(2, '0')); }}
-                  activeOpacity={0.7}
+      {/* Timer */}
+      {mode === 'timer' && (
+        <View style={chronoStyles.watchContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={chronoStyles.presetRow}
+          >
+            {TIMER_PRESETS.map((p) => (
+              <TouchableOpacity
+                key={p.seconds}
+                style={[
+                  chronoStyles.presetPill,
+                  timerPreset === p.seconds && chronoStyles.presetPillActive,
+                ]}
+                onPress={() => {
+                  setTimerPreset(p.seconds);
+                  setTimerRemaining(p.seconds);
+                  setTimerRunning(false);
+                }}
+              >
+                <Text
+                  style={[
+                    chronoStyles.presetText,
+                    timerPreset === p.seconds && chronoStyles.presetTextActive,
+                  ]}
                 >
-                  <Text style={cmSt.qTxt}>{fmtRest(s)}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={cmSt.btns}>
-              <TouchableOpacity style={cmSt.cancelBtn} onPress={() => setShowCustom(false)} activeOpacity={0.7}>
-                <Text style={cmSt.cancelTxt}>Annuler</Text>
+                  {p.label}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={cmSt.saveBtn} onPress={saveCustom} activeOpacity={0.8}>
-                <Text style={cmSt.saveTxt}>Créer & Lancer</Text>
-              </TouchableOpacity>
-            </View>
+            ))}
+          </ScrollView>
+
+          <Text style={chronoStyles.bigTime}>{formatTime(timerRemaining)}</Text>
+
+          <View style={chronoStyles.btnRow}>
+            <TouchableOpacity
+              style={chronoStyles.grayBtn}
+              onPress={() => {
+                setTimerRunning(false);
+                setTimerRemaining(timerPreset);
+              }}
+            >
+              <Text style={chronoStyles.grayBtnText}>Reinitialiser</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[chronoStyles.mainBtn, timerRunning ? chronoStyles.orangeBtn : chronoStyles.greenBtn]}
+              onPress={() => {
+                if (timerRemaining === 0) setTimerRemaining(timerPreset);
+                setTimerRunning((r) => !r);
+              }}
+            >
+              <Text style={chronoStyles.mainBtnText}>{timerRunning ? 'Pause' : 'Demarrer'}</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
+
+      {/* Repos */}
+      {mode === 'repos' && (
+        <View style={chronoStyles.watchContainer}>
+          <Text style={chronoStyles.bigTime}>{formatTime(reposRemaining)}</Text>
+          <View style={chronoStyles.btnRow}>
+            <TouchableOpacity
+              style={chronoStyles.grayBtn}
+              onPress={() => {
+                setReposRunning(false);
+                setReposRemaining(reposDefault);
+              }}
+            >
+              <Text style={chronoStyles.grayBtnText}>Reinitialiser</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[chronoStyles.mainBtn, reposRunning ? chronoStyles.orangeBtn : chronoStyles.greenBtn]}
+              onPress={() => {
+                if (reposRemaining === 0) setReposRemaining(reposDefault);
+                setReposRunning((r) => !r);
+              }}
+            >
+              <Text style={chronoStyles.mainBtnText}>{reposRunning ? 'Pause' : 'Demarrer'}</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={chronoStyles.reposHint}>Duree par defaut: 90 secondes</Text>
+        </View>
+      )}
+
+      {/* Tabata */}
+      {mode === 'tabata' && (
+        <View style={chronoStyles.watchContainer}>
+          <Text style={chronoStyles.bigTime}>00:20</Text>
+          <Text style={chronoStyles.reposHint}>Tabata: 20s effort / 10s repos</Text>
+          <View style={chronoStyles.btnRow}>
+            <TouchableOpacity style={[chronoStyles.mainBtn, chronoStyles.greenBtn]}>
+              <Text style={chronoStyles.mainBtnText}>Demarrer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+const chronoStyles = StyleSheet.create({
+  container: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  modeRow: {
+    gap: 8,
+    marginBottom: 32,
+    paddingHorizontal: 4,
+  },
+  modePill: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.card,
+  },
+  modePillActive: {
+    backgroundColor: Colors.text,
+  },
+  modePillText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  modePillTextActive: {
+    color: Colors.background,
+    fontWeight: '600',
+  },
+  watchContainer: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  bigTime: {
+    color: Colors.text,
+    fontSize: 64,
+    fontWeight: '300',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 2,
+    marginBottom: 32,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  mainBtn: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 30,
+    minWidth: 130,
+    alignItems: 'center',
+  },
+  greenBtn: {
+    backgroundColor: Colors.accent,
+  },
+  orangeBtn: {
+    backgroundColor: Colors.accentOrange,
+  },
+  mainBtnText: {
+    color: Colors.background,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  grayBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 30,
+    backgroundColor: Colors.card,
+  },
+  grayBtnText: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  presetRow: {
+    gap: 8,
+    marginBottom: 24,
+    paddingHorizontal: 4,
+  },
+  presetPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: Colors.card,
+  },
+  presetPillActive: {
+    backgroundColor: Colors.accent,
+  },
+  presetText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  presetTextActive: {
+    color: Colors.background,
+    fontWeight: '700',
+  },
+  lapsContainer: {
+    width: '100%',
+    marginTop: 16,
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  lapsTitle: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    letterSpacing: 0.5,
+  },
+  lapRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.separator,
+  },
+  lapNum: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  lapSplit: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    fontVariant: ['tabular-nums'],
+    flex: 1,
+    textAlign: 'center',
+  },
+  lapTime: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+    flex: 1,
+    textAlign: 'right',
+  },
+  reposHint: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    marginTop: 8,
+  },
+});
+
+// ─── TAB: NUTRITION ───────────────────────────────────────────────────────────
+
+type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+const MEAL_LABELS: Record<MealType, string> = {
+  breakfast: 'Petit-dejeuner',
+  lunch: 'Dejeuner',
+  dinner: 'Diner',
+  snack: 'Collations',
+};
+
+function MacroBar({
+  label,
+  current,
+  goal,
+  color,
+  unit = 'g',
+}: {
+  label: string;
+  current: number;
+  goal: number;
+  color: string;
+  unit?: string;
+}) {
+  const pct = Math.min(current / goal, 1);
+  return (
+    <View style={nutStyles.macroRow}>
+      <Text style={nutStyles.macroLabel}>{label}</Text>
+      <View style={nutStyles.barContainer}>
+        <View style={[nutStyles.barFill, { width: `${pct * 100}%` as any, backgroundColor: color }]} />
+      </View>
+      <Text style={nutStyles.macroValue}>
+        {Math.round(current)}/{goal}{unit}
+      </Text>
+    </View>
+  );
+}
+
+function MealSection({ mealType }: { mealType: MealType }) {
+  const { meals, getMealTotals } = useNutritionStore();
+  const [expanded, setExpanded] = useState(true);
+  const items = meals.filter((m) => m.mealType === mealType);
+  const totals = getMealTotals(mealType);
+
+  return (
+    <View style={nutStyles.mealSection}>
+      <TouchableOpacity
+        style={nutStyles.mealHeader}
+        onPress={() => setExpanded((e) => !e)}
+      >
+        <Text style={nutStyles.mealTitle}>{MEAL_LABELS[mealType]}</Text>
+        <View style={nutStyles.mealHeaderRight}>
+          <Text style={nutStyles.mealKcal}>{Math.round(totals.calories)} kcal</Text>
+          <Ionicons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={16}
+            color={Colors.textSecondary}
+          />
+        </View>
+      </TouchableOpacity>
+
+      {expanded && (
+        <View>
+          {items.map((m) => {
+            const ratio =
+              m.foodItem.servingUnit === 'g'
+                ? m.quantity / m.foodItem.servingSize
+                : m.quantity;
+            const kcal = Math.round(m.foodItem.calories * ratio);
+            return (
+              <View key={m.id} style={nutStyles.foodRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={nutStyles.foodName}>{m.foodItem.name}</Text>
+                  <Text style={nutStyles.foodGrams}>
+                    {m.quantity}{m.foodItem.servingUnit}
+                  </Text>
+                </View>
+                <Text style={nutStyles.foodKcal}>{kcal} kcal</Text>
+              </View>
+            );
+          })}
+          <TouchableOpacity style={nutStyles.addFoodBtn}>
+            <Ionicons name="add" size={14} color={Colors.textSecondary} />
+            <Text style={nutStyles.addFoodText}>Ajouter un aliment</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function NutritionContent() {
+  const { getTotals, goals } = useNutritionStore();
+  const totals = getTotals();
+
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={nutStyles.container}>
+      {/* Macro summary */}
+      <View style={nutStyles.summaryCard}>
+        <Text style={nutStyles.summaryTitle}>Macros du jour</Text>
+        <MacroBar
+          label="Proteines"
+          current={totals.protein}
+          goal={goals.protein}
+          color="#3B82F6"
+        />
+        <MacroBar
+          label="Glucides"
+          current={totals.carbs}
+          goal={goals.carbs}
+          color={Colors.accentOrange}
+        />
+        <MacroBar
+          label="Lipides"
+          current={totals.fat}
+          goal={goals.fat}
+          color="#EF4444"
+        />
+        <MacroBar
+          label="Calories"
+          current={totals.calories}
+          goal={goals.calories}
+          color={Colors.accent}
+          unit=" kcal"
+        />
+      </View>
+
+      {/* Meal sections */}
+      {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((mt) => (
+        <MealSection key={mt} mealType={mt} />
+      ))}
 
       <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
 
-const chSt = StyleSheet.create({
-  scroll: { paddingHorizontal: 16, paddingTop: 12 },
-  clockCard: {
-    backgroundColor: Colors.card, borderRadius: 24, padding: 20,
-    marginBottom: 14, borderWidth: 1, borderColor: Colors.border, alignItems: 'center',
+const nutStyles = StyleSheet.create({
+  container: {
+    padding: 16,
   },
-  clockTime: { fontSize: 62, fontWeight: '900', letterSpacing: -2 },
-  clockSub: { color: Colors.textMuted, fontSize: 13, marginTop: 4 },
-  clockTotal: { color: Colors.textSecondary, fontSize: 13, marginTop: 2 },
-  finBtn: { marginTop: 12, backgroundColor: Colors.accent, borderRadius: 20, paddingHorizontal: 22, paddingVertical: 10 },
-  finBtnTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  adjRow: { flexDirection: 'row', gap: 8, marginTop: 16, marginBottom: 14, width: '100%' },
-  adjBtn: {
-    flex: 1, backgroundColor: Colors.background, borderRadius: 10,
-    paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
+  summaryCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 10,
   },
-  adjTxt: { color: Colors.textSecondary, fontSize: 13, fontWeight: '700' },
-  ctrlRow: { flexDirection: 'row', gap: 10, width: '100%' },
-  resetBtn: { paddingHorizontal: 20, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
-  resetTxt: { color: Colors.textSecondary, fontSize: 15, fontWeight: '700' },
-  playBtn: { flex: 1, backgroundColor: '#4C9FFF', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-  pauseBtn: { backgroundColor: '#FFB800' },
-  playTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  card: { backgroundColor: Colors.card, borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: Colors.border },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  cardTitle: { color: Colors.text, fontSize: 15, fontWeight: '700', marginBottom: 12 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.background },
-  chipSel: { borderColor: '#4C9FFF', backgroundColor: 'rgba(76,159,255,0.1)' },
-  chipTxt: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' },
-  chipTxtSel: { color: '#4C9FFF', fontWeight: '800' },
-  createBtn: { backgroundColor: Colors.accentMuted, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: Colors.accent },
-  createTxt: { color: Colors.accent, fontSize: 13, fontWeight: '700' },
-  empty: { color: Colors.textMuted, textAlign: 'center', paddingVertical: 14 },
-  savedRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  savedRowSel: { backgroundColor: 'rgba(29,185,84,0.04)', borderRadius: 10, paddingHorizontal: 6 },
-  savedDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.border },
-  savedLabel: { color: Colors.text, fontSize: 14, fontWeight: '600' },
-  savedDur: { color: Colors.textMuted, fontSize: 12, marginTop: 1 },
-  histRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  histDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.accent },
-  histTxt: { color: Colors.textSecondary, fontSize: 13 },
+  summaryTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  macroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  macroLabel: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    width: 80,
+  },
+  barContainer: {
+    flex: 1,
+    height: 6,
+    backgroundColor: Colors.cardAlt,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  macroValue: {
+    color: Colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+    width: 80,
+    textAlign: 'right',
+  },
+  mealSection: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  mealHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+  },
+  mealTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  mealHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mealKcal: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+  },
+  foodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.separator,
+  },
+  foodName: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  foodGrams: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    marginTop: 1,
+  },
+  foodKcal: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  addFoodBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.separator,
+  },
+  addFoodText: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+  },
 });
 
-const cmSt = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: Colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24 },
-  title: { color: Colors.text, fontSize: 20, fontWeight: '800', marginBottom: 18 },
-  fieldLbl: { color: Colors.textSecondary, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase' },
-  input: { backgroundColor: Colors.card, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: Colors.text, fontSize: 15, borderWidth: 1, borderColor: Colors.border, marginBottom: 16 },
-  durRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
-  durField: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.card, borderRadius: 14, borderWidth: 1.5, borderColor: '#4C9FFF', paddingHorizontal: 16 },
-  durInput: { flex: 1, fontSize: 30, fontWeight: '800', color: Colors.text, paddingVertical: 12 },
-  durUnit: { color: Colors.textMuted, fontSize: 14 },
-  durSep: { color: Colors.textMuted, fontSize: 28, fontWeight: '700' },
-  qGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
-  qChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card },
-  qTxt: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
-  btns: { flexDirection: 'row', gap: 10 },
-  cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
-  cancelTxt: { color: Colors.textSecondary, fontSize: 15, fontWeight: '600' },
-  saveBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: Colors.accent, alignItems: 'center' },
-  saveTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
-});
+// ─── TAB: EAU ─────────────────────────────────────────────────────────────────
 
-// ─── Séance Screen ────────────────────────────────────────────────────────────
+const WATER_GAUGE_SIZE = 200;
+const WATER_GAUGE_STROKE = 18;
+const WATER_RADIUS = (WATER_GAUGE_SIZE - WATER_GAUGE_STROKE) / 2;
+const WATER_CIRCUMFERENCE = 2 * Math.PI * WATER_RADIUS;
 
-export default function SeanceScreen() {
-  const [tab, setTab] = useState<'seance' | 'chrono'>('seance');
-  const [showAddEx, setShowAddEx] = useState(false);
-
-  const {
-    isActive, timerSeconds, workoutName, exercises,
-    restTimerActive, restTimerSeconds, restTimerTotal,
-    tickTimer, tickRestTimer, stopRestTimer, endWorkout, addExercise,
-  } = useWorkoutStore();
-
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const restRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (isActive) timerRef.current = setInterval(tickTimer, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isActive]);
-
-  useEffect(() => {
-    if (restTimerActive) {
-      restRef.current = setInterval(tickRestTimer, 1000);
-    } else {
-      if (restRef.current) clearInterval(restRef.current);
-    }
-    return () => { if (restRef.current) clearInterval(restRef.current); };
-  }, [restTimerActive]);
-
-  const totalSets = exercises.reduce((a, ex) => a + ex.sets.length, 0);
-  const doneSets  = exercises.reduce((a, ex) => a + ex.sets.filter((s) => s.done).length, 0);
-  const volume    = exercises.reduce((a, ex) => a + ex.sets.reduce((b, s) => b + (s.done ? s.weight * s.reps : 0), 0), 0);
-
-  const handleFinish = () => {
-    Alert.alert(
-      'Terminer la séance ?',
-      `${doneSets}/${totalSets} séries · ${fmt(timerSeconds)} · ${volume.toLocaleString('fr-FR')} kg`,
-      [
-        { text: 'Continuer', style: 'cancel' },
-        { text: 'Terminer ✓', style: 'destructive', onPress: endWorkout },
-      ]
-    );
-  };
+function WaterContent() {
+  const { current, goal, weekHistory, entries, addWater, removeEntry } = useWaterStore();
+  const pct = Math.min(current / goal, 1);
+  const strokeDash = WATER_CIRCUMFERENCE * pct;
+  const maxBar = Math.max(...weekHistory.map((d) => d.amount), 1);
+  const [showWaterModal, setShowWaterModal] = useState(false);
 
   return (
-    <SafeAreaView style={sc.safe} edges={['top']}>
-      {/* Header */}
-      <View style={sc.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={sc.headerSub}>💪 Séance en cours</Text>
-          <Text style={sc.workoutName} numberOfLines={1}>{workoutName}</Text>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={waterStyles.container}>
+      {/* Circular gauge */}
+      <View style={waterStyles.gaugeWrapper}>
+        <Svg width={WATER_GAUGE_SIZE} height={WATER_GAUGE_SIZE}>
+          {/* Background circle */}
+          <Circle
+            cx={WATER_GAUGE_SIZE / 2}
+            cy={WATER_GAUGE_SIZE / 2}
+            r={WATER_RADIUS}
+            stroke={Colors.card}
+            strokeWidth={WATER_GAUGE_STROKE}
+            fill="none"
+          />
+          {/* Progress circle */}
+          <Circle
+            cx={WATER_GAUGE_SIZE / 2}
+            cy={WATER_GAUGE_SIZE / 2}
+            r={WATER_RADIUS}
+            stroke={Colors.accent}
+            strokeWidth={WATER_GAUGE_STROKE}
+            fill="none"
+            strokeDasharray={`${strokeDash} ${WATER_CIRCUMFERENCE}`}
+            strokeDashoffset={0}
+            strokeLinecap="round"
+            rotation="-90"
+            origin={`${WATER_GAUGE_SIZE / 2}, ${WATER_GAUGE_SIZE / 2}`}
+          />
+        </Svg>
+        <View style={waterStyles.gaugeInner}>
+          <Text style={waterStyles.gaugeMain}>
+            {(current / 1000).toFixed(1)}L
+          </Text>
+          <Text style={waterStyles.gaugeGoal}>/ {(goal / 1000).toFixed(0)}L</Text>
+          <Text style={waterStyles.gaugePct}>{Math.round(pct * 100)}%</Text>
         </View>
-        <TouchableOpacity style={sc.finBtn} onPress={handleFinish} activeOpacity={0.8}>
-          <Text style={sc.finBtnTxt}>Terminer</Text>
+      </View>
+
+      {/* Quick add buttons */}
+      <View style={waterStyles.quickAddRow}>
+        {[
+          { label: '+250 ml', amount: 250 },
+          { label: '+500 ml', amount: 500 },
+        ].map((btn) => (
+          <TouchableOpacity
+            key={btn.amount}
+            style={waterStyles.quickBtn}
+            onPress={() => addWater(btn.amount)}
+          >
+            <Text style={waterStyles.quickBtnText}>{btn.label}</Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity
+          style={waterStyles.quickBtn}
+          onPress={() => setShowWaterModal(true)}
+        >
+          <Text style={waterStyles.quickBtnText}>Autre</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Stats (Séries + Volume) */}
-      <View style={sc.statsBar}>
-        <View style={sc.stat}>
-          <Text style={sc.statVal}>{doneSets}/{totalSets}</Text>
-          <Text style={sc.statLbl}>Séries</Text>
-        </View>
-        <View style={sc.div} />
-        <View style={sc.stat}>
-          <Text style={sc.statVal}>{volume.toLocaleString('fr-FR')}</Text>
-          <Text style={sc.statLbl}>Volume kg</Text>
-        </View>
-      </View>
-
-      {/* Progress bar */}
-      <View style={sc.progTrack}>
-        <View style={[sc.progFill, { width: totalSets > 0 ? `${(doneSets / totalSets) * 100}%` : '0%' }]} />
-      </View>
-
-      {/* Tabs */}
-      <TabBar active={tab} onChange={setTab} />
-
-      {/* Content */}
-      {tab === 'seance' ? (
-        <ScrollView
-          style={sc.scroll}
-          contentContainerStyle={sc.content}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {exercises.length === 0 ? (
-            <View style={sc.emptyState}>
-              <Text style={sc.emptyEmoji}>💪</Text>
-              <Text style={sc.emptyTitle}>Aucun exercice</Text>
-              <Text style={sc.emptySubtitle}>Ajoute un exercice pour commencer</Text>
+      {/* Today's entries history */}
+      {entries.length > 0 && (
+        <View style={waterStyles.historyCard}>
+          <Text style={waterStyles.historyTitle}>Historique du jour</Text>
+          {entries.map((entry) => (
+            <View key={entry.id} style={waterStyles.entryRow}>
+              <Text style={waterStyles.entryTime}>{entry.time}</Text>
+              <Text style={waterStyles.entryAmount}>{entry.amount} ml</Text>
+              <TouchableOpacity
+                style={waterStyles.deleteBtn}
+                onPress={() => removeEntry(entry.id)}
+              >
+                <Ionicons name="close" size={16} color="#FF3B30" />
+              </TouchableOpacity>
             </View>
-          ) : (
-            exercises.map((ex) => <ExerciseCard key={ex.id} exercise={ex} />)
-          )}
-
-          <TouchableOpacity style={sc.addExBtn} onPress={() => setShowAddEx(true)} activeOpacity={0.7}>
-            <Text style={sc.addExTxt}>➕  Ajouter un exercice</Text>
-          </TouchableOpacity>
-
-          <View style={{ height: 24 }} />
-        </ScrollView>
-      ) : (
-        <ChronoTab />
+          ))}
+        </View>
       )}
 
-      {/* Rest overlay */}
-      {restTimerActive && tab === 'seance' && (
-        <RestOverlay seconds={restTimerSeconds} total={restTimerTotal} onStop={stopRestTimer} />
-      )}
+      {/* 7-day bar chart */}
+      <View style={waterStyles.chartCard}>
+        <Text style={waterStyles.chartTitle}>7 derniers jours</Text>
+        <View style={waterStyles.chart}>
+          {weekHistory.map((d) => {
+            const h = (d.amount / maxBar) * 80;
+            const isGoal = d.amount >= d.goal;
+            return (
+              <View key={d.day} style={waterStyles.barCol}>
+                <View style={waterStyles.barTrack}>
+                  <View
+                    style={[
+                      waterStyles.barFill,
+                      { height: h, backgroundColor: isGoal ? Colors.accent : Colors.cardAlt },
+                    ]}
+                  />
+                </View>
+                <Text style={waterStyles.barDay}>{d.day}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
 
-      {/* Add exercise modal */}
-      <AddExerciseModal
-        visible={showAddEx}
-        onAdd={(ex) => addExercise(ex)}
-        onClose={() => setShowAddEx(false)}
+      <CustomWaterModal
+        visible={showWaterModal}
+        onClose={() => setShowWaterModal(false)}
+        onAdd={(ml) => {
+          addWater(ml);
+          setShowWaterModal(false);
+        }}
       />
+    </ScrollView>
+  );
+}
+
+const waterStyles = StyleSheet.create({
+  container: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  gaugeWrapper: {
+    width: WATER_GAUGE_SIZE,
+    height: WATER_GAUGE_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  gaugeInner: {
+    position: 'absolute',
+    alignItems: 'center',
+  },
+  gaugeMain: {
+    color: Colors.text,
+    fontSize: 32,
+    fontWeight: '800',
+  },
+  gaugeGoal: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  gaugePct: {
+    color: Colors.accent,
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  quickAddRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+    width: '100%',
+  },
+  quickBtn: {
+    flex: 1,
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  quickBtnText: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  historyCard: {
+    width: '100%',
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  historyTitle: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  entryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.separator,
+  },
+  entryTime: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    width: 50,
+    fontVariant: ['tabular-nums'],
+  },
+  entryAmount: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  deleteBtn: {
+    padding: 6,
+  },
+  chartCard: {
+    width: '100%',
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 16,
+  },
+  chartTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  chart: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    height: 100,
+  },
+  barCol: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  barTrack: {
+    height: 80,
+    width: 24,
+    borderRadius: 6,
+    backgroundColor: Colors.cardAlt,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  barFill: {
+    width: '100%',
+    borderRadius: 6,
+  },
+  barDay: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+});
+
+// ─── TAB: PROGRAMME ───────────────────────────────────────────────────────────
+
+const TODAY_INDEX = new Date().getDay(); // 0=Sun, 1=Mon…
+// Map JS day (0=Sun) to our weeklyProgram index (0=Mon)
+const todayProgramIndex = TODAY_INDEX === 0 ? 6 : TODAY_INDEX - 1;
+
+function ProgrammeContent() {
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={progStyles.container}>
+      {/* Active program header */}
+      <View style={progStyles.headerCard}>
+        <Text style={progStyles.programName}>PPL — 3 jours/semaine</Text>
+        <Text style={progStyles.programMeta}>6 jours · Push / Pull / Legs</Text>
+      </View>
+
+      {/* Days list */}
+      {weeklyProgram.map((day, i) => {
+        const isToday = i === todayProgramIndex;
+        const isRest = day.type === 'rest';
+        return (
+          <View
+            key={day.day}
+            style={[
+              progStyles.dayCard,
+              isToday && progStyles.dayCardToday,
+            ]}
+          >
+            <View style={progStyles.dayLeft}>
+              <Text style={[progStyles.dayShort, { color: day.color }]}>
+                {day.shortDay}
+              </Text>
+              {isToday && (
+                <View style={progStyles.todayDot} />
+              )}
+            </View>
+            <View style={progStyles.dayCenter}>
+              <Text style={progStyles.dayLabel}>{day.label}</Text>
+              <Text style={progStyles.dayExCount}>
+                {isRest ? 'Journee de recuperation' : `${day.exercises.length} exercices`}
+              </Text>
+            </View>
+            {isRest ? (
+              <View style={progStyles.reposBadge}>
+                <Text style={progStyles.reposBadgeText}>REPOS</Text>
+              </View>
+            ) : (
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={Colors.textTertiary}
+              />
+            )}
+          </View>
+        );
+      })}
+
+      {/* CTA */}
+      <TouchableOpacity style={progStyles.launchBtn}>
+        <Text style={progStyles.launchBtnText}>Lancer la seance du jour</Text>
+      </TouchableOpacity>
+
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+}
+
+const progStyles = StyleSheet.create({
+  container: {
+    padding: 16,
+  },
+  headerCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.accent,
+  },
+  programName: {
+    color: Colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  programMeta: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+  },
+  dayCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  dayCardToday: {
+    borderColor: Colors.cardAlt,
+    backgroundColor: '#232323',
+  },
+  dayLeft: {
+    width: 40,
+    alignItems: 'center',
+  },
+  dayShort: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  todayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: Colors.accent,
+    marginTop: 3,
+  },
+  dayCenter: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  dayLabel: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  dayExCount: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+  },
+  reposBadge: {
+    backgroundColor: Colors.tagGreenBg,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  reposBadgeText: {
+    color: Colors.accent,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  launchBtn: {
+    backgroundColor: Colors.cta,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  launchBtnText: {
+    color: Colors.ctaText,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});
+
+// ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
+
+export default function SeanceScreen() {
+  const [activeTab, setActiveTab] = useState<SeanceTab>('seance');
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
+
+      <SubTabBar active={activeTab} onPress={setActiveTab} />
+
+      <View style={styles.content}>
+        {activeTab === 'seance' && <SeanceContent />}
+        {activeTab === 'chrono' && <ChronoContent />}
+        {activeTab === 'nutrition' && <NutritionContent />}
+        {activeTab === 'eau' && <WaterContent />}
+        {activeTab === 'programme' && <ProgrammeContent />}
+      </View>
     </SafeAreaView>
   );
 }
 
-const sc = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.border,
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
-  headerSub: { color: Colors.textSecondary, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 2 },
-  workoutName: { color: Colors.text, fontSize: 17, fontWeight: '800', letterSpacing: -0.3 },
-  finBtn: {
-    backgroundColor: 'rgba(255,76,76,0.12)', paddingHorizontal: 16, paddingVertical: 10,
-    borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,76,76,0.35)', marginLeft: 12,
+  content: {
+    flex: 1,
   },
-  finBtnTxt: { color: Colors.error, fontSize: 14, fontWeight: '700' },
-  statsBar: {
-    flexDirection: 'row', backgroundColor: Colors.card,
-    marginHorizontal: 16, marginTop: 8, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  stat: { flex: 1, alignItems: 'center' },
-  statVal: { color: Colors.text, fontSize: 17, fontWeight: '800', letterSpacing: -0.5 },
-  statLbl: { color: Colors.textSecondary, fontSize: 10, marginTop: 2 },
-  div: { width: 1, backgroundColor: Colors.border, marginHorizontal: 4 },
-  progTrack: { height: 3, backgroundColor: Colors.border, marginHorizontal: 16, marginTop: 6, borderRadius: 2, overflow: 'hidden' },
-  progFill: { height: '100%', backgroundColor: Colors.accent, borderRadius: 2 },
-  scroll: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8 },
-  emptyState: { alignItems: 'center', paddingVertical: 60, gap: 8 },
-  emptyEmoji: { fontSize: 48, marginBottom: 8 },
-  emptyTitle: { color: Colors.text, fontSize: 18, fontWeight: '700' },
-  emptySubtitle: { color: Colors.textMuted, fontSize: 14 },
-  addExBtn: {
-    backgroundColor: Colors.card, borderRadius: 14, paddingVertical: 16,
-    alignItems: 'center', borderWidth: 1.5, borderColor: Colors.accent,
-    borderStyle: 'dashed', marginBottom: 8,
-  },
-  addExTxt: { color: Colors.accent, fontSize: 15, fontWeight: '700' },
 });
