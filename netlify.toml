@@ -6,3 +6,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
+
+# Plugin Next.js pour le routing et le SSR
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
