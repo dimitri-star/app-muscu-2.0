@@ -1,0 +1,8 @@
+# FitTrack Pro - app web (Next.js dans /web)
+[build]
+  base = "web"
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
