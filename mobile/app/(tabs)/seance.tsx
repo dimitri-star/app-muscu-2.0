@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../../constants/colors';
+import { useThemeStore } from '../../store/theme';
+import { getColors, type ThemeColors } from '../../constants/theme';
 import { useWorkoutStore, useNutritionStore, useWaterStore } from '../../store';
 import { recentWorkouts, weeklyProgram, exercisesDB } from '../../constants/mockData';
 import type { WorkoutExercise, Exercise } from '../../constants/mockData';
@@ -64,13 +66,25 @@ const SEANCE_TABS: { key: SeanceTab; label: string }[] = [
   { key: 'programme', label: 'Programme' },
 ];
 
-function SubTabBar({
-  active,
-  onPress,
-}: {
-  active: SeanceTab;
-  onPress: (t: SeanceTab) => void;
-}) {
+function getSubStyles(colors: ReturnType<typeof getColors>) {
+  return StyleSheet.create({
+    container: {
+      flexGrow: 0,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.separator,
+    },
+    row: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+    pill: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: 'transparent' },
+    pillActive: { backgroundColor: colors.text },
+    pillText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
+    pillTextActive: { color: colors.background, fontWeight: '600' },
+  });
+}
+
+function SubTabBar({ active, onPress }: { active: SeanceTab; onPress: (t: SeanceTab) => void }) {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const subStyles = useMemo(() => getSubStyles(colors), [isDark]);
   return (
     <ScrollView
       horizontal
@@ -97,124 +111,69 @@ function SubTabBar({
   );
 }
 
-const subStyles = StyleSheet.create({
-  container: {
-    flexGrow: 0,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.separator,
-  },
-  row: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: 'transparent',
-  },
-  pillActive: {
-    backgroundColor: Colors.text,
-  },
-  pillText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textSecondary,
-  },
-  pillTextActive: {
-    color: Colors.background,
-    fontWeight: '600',
-  },
-});
-
 // ─── TAB: SEANCE ─────────────────────────────────────────────────────────────
 
-function ExerciseCard({ ex }: { ex: WorkoutExercise }) {
+function getSeanceStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    exCard: { backgroundColor: colors.card, borderRadius: 12, marginBottom: 12, overflow: 'hidden' },
+    exHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 14, paddingBottom: 8, gap: 10 },
+    exName: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
+    progressDots: { flexDirection: 'row', gap: 4 },
+    dot: { width: 8, height: 8, borderRadius: 4 },
+    dotDone: { backgroundColor: colors.accent },
+    dotPending: { backgroundColor: colors.textTertiary },
+    tableHeader: { flexDirection: 'row', paddingHorizontal: 14, paddingBottom: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
+    colHead: { color: colors.textSecondary, fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
+    colNum: { width: 28, textAlign: 'center' },
+    colInput: { flex: 1, textAlign: 'center' },
+    colCheck: { width: 44 },
+    setRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8 },
+    setNum: { color: colors.textSecondary, fontSize: 13, textAlign: 'center' },
+    setInput: { color: colors.text, fontSize: 15, fontWeight: '600', backgroundColor: colors.input, borderRadius: 8, marginHorizontal: 4, paddingHorizontal: 8, paddingVertical: 6, textAlign: 'center' },
+    checkbox: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: colors.textTertiary, alignItems: 'center', justifyContent: 'center' },
+    checkboxDone: { backgroundColor: colors.accent, borderColor: colors.accent },
+    addSetBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator, marginHorizontal: 14, marginBottom: 4 },
+    addSetText: { color: colors.text, fontSize: 13, fontWeight: '500' },
+  });
+}
+
+function ExerciseCard({ ex, styles: sc, colors }: { ex: WorkoutExercise; styles: ReturnType<typeof getSeanceStyles>; colors: ThemeColors }) {
   const { toggleSetDone, updateSet, addSet } = useWorkoutStore();
   const [expanded, setExpanded] = useState(true);
-  const doneSets = ex.sets.filter((s) => s.done).length;
 
   return (
-    <View style={seanceStyles.exCard}>
+    <View style={sc.exCard}>
       {/* Header - tappable to collapse */}
-      <TouchableOpacity
-        style={seanceStyles.exHeader}
-        onPress={() => setExpanded((e) => !e)}
-        activeOpacity={0.7}
-      >
-        <Text style={seanceStyles.exName}>{ex.exercise.name}</Text>
-        <View style={seanceStyles.progressDots}>
+      <TouchableOpacity style={sc.exHeader} onPress={() => setExpanded((e) => !e)} activeOpacity={0.7}>
+        <Text style={sc.exName}>{ex.exercise.name}</Text>
+        <View style={sc.progressDots}>
           {ex.sets.map((s) => (
-            <View
-              key={s.id}
-              style={[
-                seanceStyles.dot,
-                s.done ? seanceStyles.dotDone : seanceStyles.dotPending,
-              ]}
-            />
+            <View key={s.id} style={[sc.dot, s.done ? sc.dotDone : sc.dotPending]} />
           ))}
         </View>
-        <Ionicons
-          name={expanded ? 'chevron-up' : 'chevron-down'}
-          size={16}
-          color={Colors.textTertiary}
-          style={{ marginLeft: 6 }}
-        />
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textTertiary} style={{ marginLeft: 6 }} />
       </TouchableOpacity>
-
       {expanded && (
         <>
-          {/* Table header */}
-          <View style={seanceStyles.tableHeader}>
-            <Text style={[seanceStyles.colHead, seanceStyles.colNum]}>#</Text>
-            <Text style={[seanceStyles.colHead, seanceStyles.colInput]}>Reps</Text>
-            <Text style={[seanceStyles.colHead, seanceStyles.colInput]}>Poids</Text>
-            <Text style={[seanceStyles.colHead, seanceStyles.colCheck]}>Fait</Text>
+          <View style={sc.tableHeader}>
+            <Text style={[sc.colHead, sc.colNum]}>#</Text>
+            <Text style={[sc.colHead, sc.colInput]}>Reps</Text>
+            <Text style={[sc.colHead, sc.colInput]}>Poids</Text>
+            <Text style={[sc.colHead, sc.colCheck]}>Fait</Text>
           </View>
-
-          {/* Sets */}
           {ex.sets.map((s, i) => (
-            <View key={s.id} style={seanceStyles.setRow}>
-              <Text style={[seanceStyles.setNum, seanceStyles.colNum]}>{i + 1}</Text>
-              <TextInput
-                style={[seanceStyles.setInput, seanceStyles.colInput]}
-                value={String(s.reps)}
-                keyboardType="numeric"
-                onChangeText={(v) =>
-                  updateSet(ex.id, s.id, 'reps', parseInt(v) || 0)
-                }
-                placeholderTextColor={Colors.textTertiary}
-              />
-              <TextInput
-                style={[seanceStyles.setInput, seanceStyles.colInput]}
-                value={String(s.weight)}
-                keyboardType="numeric"
-                onChangeText={(v) =>
-                  updateSet(ex.id, s.id, 'weight', parseFloat(v) || 0)
-                }
-                placeholderTextColor={Colors.textTertiary}
-              />
-              <TouchableOpacity
-                style={[seanceStyles.colCheck, { alignItems: 'center' }]}
-                onPress={() => toggleSetDone(ex.id, s.id)}
-              >
-                <View style={[seanceStyles.checkbox, s.done && seanceStyles.checkboxDone]}>
-                  {s.done && (
-                    <Ionicons name="checkmark" size={14} color={Colors.background} />
-                  )}
-                </View>
+            <View key={s.id} style={sc.setRow}>
+              <Text style={[sc.setNum, sc.colNum]}>{i + 1}</Text>
+              <TextInput style={[sc.setInput, sc.colInput]} value={String(s.reps)} keyboardType="numeric" onChangeText={(v) => updateSet(ex.id, s.id, 'reps', parseInt(v) || 0)} placeholderTextColor={colors.textTertiary} />
+              <TextInput style={[sc.setInput, sc.colInput]} value={String(s.weight)} keyboardType="numeric" onChangeText={(v) => updateSet(ex.id, s.id, 'weight', parseFloat(v) || 0)} placeholderTextColor={colors.textTertiary} />
+              <TouchableOpacity style={[sc.colCheck, { alignItems: 'center' }]} onPress={() => toggleSetDone(ex.id, s.id)}>
+                <View style={[sc.checkbox, s.done && sc.checkboxDone]}>{s.done && <Ionicons name="checkmark" size={14} color={colors.background} />}</View>
               </TouchableOpacity>
             </View>
           ))}
-
-          {/* Add set */}
-          <TouchableOpacity
-            style={seanceStyles.addSetBtn}
-            onPress={() => addSet(ex.id)}
-          >
-            <Ionicons name="add" size={16} color={Colors.text} />
-            <Text style={seanceStyles.addSetText}>Ajouter une serie</Text>
+          <TouchableOpacity style={sc.addSetBtn} onPress={() => addSet(ex.id)}>
+            <Ionicons name="add" size={16} color={colors.text} />
+            <Text style={sc.addSetText}>Ajouter une serie</Text>
           </TouchableOpacity>
         </>
       )}
@@ -222,129 +181,27 @@ function ExerciseCard({ ex }: { ex: WorkoutExercise }) {
   );
 }
 
-const seanceStyles = StyleSheet.create({
-  exCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  exHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 8,
-    gap: 10,
-  },
-  exName: {
-    flex: 1,
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  progressDots: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  dotDone: {
-    backgroundColor: Colors.accent,
-  },
-  dotPending: {
-    backgroundColor: Colors.textTertiary,
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    paddingHorizontal: 14,
-    paddingBottom: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.separator,
-  },
-  colHead: {
-    color: Colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  colNum: {
-    width: 28,
-    textAlign: 'center',
-  },
-  colInput: {
-    flex: 1,
-    textAlign: 'center',
-  },
-  colCheck: {
-    width: 44,
-  },
-  setRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  setNum: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  setInput: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-    backgroundColor: Colors.input,
-    borderRadius: 8,
-    marginHorizontal: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    textAlign: 'center',
-  },
-  checkbox: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 2,
-    borderColor: Colors.textTertiary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxDone: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
-  },
-  addSetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.separator,
-    marginHorizontal: 14,
-    marginBottom: 4,
-  },
-  addSetText: {
-    color: Colors.text,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-});
+function getDayPickerStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+    sheet: { backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40, maxHeight: '80%' },
+    handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.separator, alignSelf: 'center', marginBottom: 20 },
+    title: { color: colors.text, fontSize: 20, fontWeight: '700', marginBottom: 16 },
+    dayRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator, gap: 12 },
+    dayBadge: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+    dayShort: { fontSize: 13, fontWeight: '700' },
+    dayInfo: { flex: 1 },
+    dayLabel: { color: colors.text, fontSize: 15, fontWeight: '600', marginBottom: 2 },
+    dayMeta: { color: colors.textSecondary, fontSize: 12 },
+    cancelBtn: { alignItems: 'center', paddingVertical: 14, marginTop: 8 },
+    cancelText: { color: colors.textSecondary, fontSize: 16, fontWeight: '500' },
+  });
+}
 
-// Program day picker modal (inline)
-function ProgramDayPicker({
-  visible,
-  onClose,
-  onSelectDay,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onSelectDay: (dayIndex: number) => void;
-}) {
+function ProgramDayPicker({ visible, onClose, onSelectDay }: { visible: boolean; onClose: () => void; onSelectDay: (dayIndex: number) => void }) {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const dayPickerStyles = useMemo(() => getDayPickerStyles(colors), [isDark]);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={dayPickerStyles.overlay} onPress={onClose}>
@@ -353,24 +210,15 @@ function ProgramDayPicker({
           <Text style={dayPickerStyles.title}>Choisir un jour</Text>
           <ScrollView>
             {weeklyProgram.map((day, index) => (
-              <TouchableOpacity
-                key={day.day}
-                style={dayPickerStyles.dayRow}
-                onPress={() => {
-                  onSelectDay(index);
-                  onClose();
-                }}
-              >
+              <TouchableOpacity key={day.day} style={dayPickerStyles.dayRow} onPress={() => { onSelectDay(index); onClose(); }}>
                 <View style={[dayPickerStyles.dayBadge, { backgroundColor: day.color + '33' }]}>
                   <Text style={[dayPickerStyles.dayShort, { color: day.color }]}>{day.shortDay}</Text>
                 </View>
                 <View style={dayPickerStyles.dayInfo}>
                   <Text style={dayPickerStyles.dayLabel}>{day.label}</Text>
-                  <Text style={dayPickerStyles.dayMeta}>
-                    {day.type === 'rest' ? 'Repos' : `${day.exercises.length} exercices`}
-                  </Text>
+                  <Text style={dayPickerStyles.dayMeta}>{day.type === 'rest' ? 'Repos' : `${day.exercises.length} exercices`}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+                <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -383,80 +231,39 @@ function ProgramDayPicker({
   );
 }
 
-const dayPickerStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: Colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 40,
-    maxHeight: '80%',
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.separator,
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    color: Colors.text,
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  dayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.separator,
-    gap: 12,
-  },
-  dayBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayShort: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  dayInfo: {
-    flex: 1,
-  },
-  dayLabel: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  dayMeta: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-  },
-  cancelBtn: {
-    alignItems: 'center',
-    paddingVertical: 14,
-    marginTop: 8,
-  },
-  cancelText: {
-    color: Colors.textSecondary,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-});
+function getActiveStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    idleContainer: { padding: 16 },
+    idleTitle: { color: colors.text, fontSize: 26, fontWeight: '700', marginBottom: 16 },
+    ctaBtn: { backgroundColor: colors.cta, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 28 },
+    ctaBtnText: { color: colors.ctaText, fontSize: 16, fontWeight: '700' },
+    sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 12 },
+    historyCard: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10 },
+    historyDate: { color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
+    historyName: { color: colors.text, fontSize: 15, fontWeight: '600', marginBottom: 6 },
+    historyMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    historyMetaText: { color: colors.textSecondary, fontSize: 13 },
+    historyMetaSep: { color: colors.textTertiary, fontSize: 13 },
+    activeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+    roundBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+    timerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    timer: { color: colors.accentOrange, fontSize: 20, fontWeight: '700', fontVariant: ['tabular-nums'] },
+    workoutName: { color: colors.text, fontSize: 20, fontWeight: '700', paddingHorizontal: 16, marginBottom: 12 },
+    scrollContent: { paddingHorizontal: 16, paddingBottom: 20 },
+    addExContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: Platform.OS === 'ios' ? 16 : 12, paddingTop: 10, backgroundColor: colors.background, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
+    addExBtn: { backgroundColor: colors.cta, borderRadius: 12, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+    addExText: { color: colors.ctaText, fontSize: 16, fontWeight: '700' },
+    restBubble: { position: 'absolute', bottom: 90, right: 20, width: 72, height: 72, borderRadius: 36, backgroundColor: colors.accentYellowGreen, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+    restBubbleTime: { color: colors.background, fontSize: 14, fontWeight: '800' },
+    restBubbleLabel: { color: colors.background, fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
+  });
+}
 
 function SeanceContent() {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const activeStyles = useMemo(() => getActiveStyles(colors), [isDark]);
+  const seanceStyles = useMemo(() => getSeanceStyles(colors), [isDark]);
   const {
     isActive,
     timerSeconds,
@@ -596,7 +403,7 @@ function SeanceContent() {
       {/* Active header */}
       <View style={activeStyles.activeHeader}>
         <TouchableOpacity style={activeStyles.roundBtn} onPress={endWorkout}>
-          <Ionicons name="close" size={20} color={Colors.text} />
+          <Ionicons name="close" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={activeStyles.timerCenter}>
           <Ionicons name="timer-outline" size={14} color={Colors.accentOrange} />
@@ -606,7 +413,7 @@ function SeanceContent() {
           style={activeStyles.roundBtn}
           onPress={() => setShowSaveModal(true)}
         >
-          <Ionicons name="checkmark" size={20} color={Colors.text} />
+          <Ionicons name="checkmark" size={20} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -619,7 +426,7 @@ function SeanceContent() {
         showsVerticalScrollIndicator={false}
       >
         {exercises.map((ex) => (
-          <ExerciseCard key={ex.id} ex={ex} />
+          <ExerciseCard key={ex.id} ex={ex} styles={seanceStyles} colors={colors} />
         ))}
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -630,7 +437,7 @@ function SeanceContent() {
           style={activeStyles.addExBtn}
           onPress={() => setShowExerciseModal(true)}
         >
-          <Ionicons name="add" size={18} color={Colors.ctaText} />
+          <Ionicons name="add" size={18} color={colors.ctaText} />
           <Text style={activeStyles.addExText}>Ajouter un exercice</Text>
         </TouchableOpacity>
       </View>
@@ -669,159 +476,6 @@ function SeanceContent() {
   );
 }
 
-const activeStyles = StyleSheet.create({
-  // Idle
-  idleContainer: {
-    padding: 16,
-  },
-  idleTitle: {
-    color: Colors.text,
-    fontSize: 26,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  ctaBtn: {
-    backgroundColor: Colors.cta,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 28,
-  },
-  ctaBtnText: {
-    color: Colors.ctaText,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  sectionTitle: {
-    color: Colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  historyCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-  },
-  historyDate: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  historyName: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  historyMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  historyMetaText: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-  },
-  historyMetaSep: {
-    color: Colors.textTertiary,
-    fontSize: 13,
-  },
-
-  // Active
-  activeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  roundBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  timerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  timer: {
-    color: Colors.accentOrange,
-    fontSize: 20,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
-  workoutName: {
-    color: Colors.text,
-    fontSize: 20,
-    fontWeight: '700',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-  },
-  addExContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
-    paddingBottom: Platform.OS === 'ios' ? 16 : 12,
-    paddingTop: 10,
-    backgroundColor: Colors.background,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.separator,
-  },
-  addExBtn: {
-    backgroundColor: Colors.cta,
-    borderRadius: 12,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  addExText: {
-    color: Colors.ctaText,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  restBubble: {
-    position: 'absolute',
-    bottom: 90,
-    right: 20,
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.accentYellowGreen,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  restBubbleTime: {
-    color: Colors.background,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  restBubbleLabel: {
-    color: Colors.background,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-});
-
 // ─── TAB: CHRONO ─────────────────────────────────────────────────────────────
 
 type ChronoMode = 'chrono' | 'timer' | 'repos' | 'tabata';
@@ -840,8 +494,43 @@ interface LapEntry {
   split: string;
 }
 
+function getChronoStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { padding: 16, alignItems: 'center' },
+    modeRow: { gap: 8, marginBottom: 32, paddingHorizontal: 4 },
+    modePill: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.card },
+    modePillActive: { backgroundColor: colors.text },
+    modePillText: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
+    modePillTextActive: { color: colors.background, fontWeight: '600' },
+    watchContainer: { alignItems: 'center', width: '100%' },
+    bigTime: { color: colors.text, fontSize: 64, fontWeight: '300', fontVariant: ['tabular-nums'], letterSpacing: 2, marginBottom: 32 },
+    btnRow: { flexDirection: 'row', gap: 12, alignItems: 'center', marginBottom: 16 },
+    mainBtn: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: 30, minWidth: 130, alignItems: 'center' },
+    greenBtn: { backgroundColor: colors.accent },
+    orangeBtn: { backgroundColor: colors.accentOrange },
+    mainBtnText: { color: colors.background, fontSize: 16, fontWeight: '700' },
+    grayBtn: { paddingHorizontal: 18, paddingVertical: 14, borderRadius: 30, backgroundColor: colors.card },
+    grayBtnText: { color: colors.text, fontSize: 14, fontWeight: '500' },
+    presetRow: { gap: 8, marginBottom: 24, paddingHorizontal: 4 },
+    presetPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16, backgroundColor: colors.card },
+    presetPillActive: { backgroundColor: colors.accent },
+    presetText: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
+    presetTextActive: { color: colors.background, fontWeight: '700' },
+    lapsContainer: { width: '100%', marginTop: 16, backgroundColor: colors.card, borderRadius: 12, overflow: 'hidden' },
+    lapsTitle: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, letterSpacing: 0.5 },
+    lapRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
+    lapNum: { color: colors.text, fontSize: 14, fontWeight: '500', flex: 1 },
+    lapSplit: { color: colors.textSecondary, fontSize: 14, fontVariant: ['tabular-nums'], flex: 1, textAlign: 'center' },
+    lapTime: { color: colors.text, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'], flex: 1, textAlign: 'right' },
+    reposHint: { color: colors.textSecondary, fontSize: 13, marginTop: 8 },
+  });
+}
+
 function ChronoContent() {
   const [mode, setMode] = useState<ChronoMode>('chrono');
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const chronoStyles = useMemo(() => getChronoStyles(colors), [isDark]);
 
   // Stopwatch
   const [swRunning, setSwRunning] = useState(false);
@@ -1093,157 +782,6 @@ function ChronoContent() {
   );
 }
 
-const chronoStyles = StyleSheet.create({
-  container: {
-    padding: 16,
-    alignItems: 'center',
-  },
-  modeRow: {
-    gap: 8,
-    marginBottom: 32,
-    paddingHorizontal: 4,
-  },
-  modePill: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.card,
-  },
-  modePillActive: {
-    backgroundColor: Colors.text,
-  },
-  modePillText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  modePillTextActive: {
-    color: Colors.background,
-    fontWeight: '600',
-  },
-  watchContainer: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  bigTime: {
-    color: Colors.text,
-    fontSize: 64,
-    fontWeight: '300',
-    fontVariant: ['tabular-nums'],
-    letterSpacing: 2,
-    marginBottom: 32,
-  },
-  btnRow: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  mainBtn: {
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 30,
-    minWidth: 130,
-    alignItems: 'center',
-  },
-  greenBtn: {
-    backgroundColor: Colors.accent,
-  },
-  orangeBtn: {
-    backgroundColor: Colors.accentOrange,
-  },
-  mainBtnText: {
-    color: Colors.background,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  grayBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderRadius: 30,
-    backgroundColor: Colors.card,
-  },
-  grayBtnText: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  presetRow: {
-    gap: 8,
-    marginBottom: 24,
-    paddingHorizontal: 4,
-  },
-  presetPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: Colors.card,
-  },
-  presetPillActive: {
-    backgroundColor: Colors.accent,
-  },
-  presetText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  presetTextActive: {
-    color: Colors.background,
-    fontWeight: '700',
-  },
-  lapsContainer: {
-    width: '100%',
-    marginTop: 16,
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  lapsTitle: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    letterSpacing: 0.5,
-  },
-  lapRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.separator,
-  },
-  lapNum: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '500',
-    flex: 1,
-  },
-  lapSplit: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    fontVariant: ['tabular-nums'],
-    flex: 1,
-    textAlign: 'center',
-  },
-  lapTime: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
-    flex: 1,
-    textAlign: 'right',
-  },
-  reposHint: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    marginTop: 8,
-  },
-});
-
 // ─── TAB: NUTRITION ───────────────────────────────────────────────────────────
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -1254,79 +792,75 @@ const MEAL_LABELS: Record<MealType, string> = {
   snack: 'Collations',
 };
 
-function MacroBar({
-  label,
-  current,
-  goal,
-  color,
-  unit = 'g',
-}: {
-  label: string;
-  current: number;
-  goal: number;
-  color: string;
-  unit?: string;
-}) {
+function getNutStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { padding: 16 },
+    summaryCard: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, gap: 10 },
+    summaryTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 4 },
+    macroRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    macroLabel: { color: colors.textSecondary, fontSize: 13, width: 80 },
+    barContainer: { flex: 1, height: 6, backgroundColor: colors.cardAlt, borderRadius: 3, overflow: 'hidden' },
+    barFill: { height: '100%', borderRadius: 3 },
+    macroValue: { color: colors.text, fontSize: 12, fontWeight: '600', width: 80, textAlign: 'right' },
+    mealSection: { backgroundColor: colors.card, borderRadius: 12, marginBottom: 10, overflow: 'hidden' },
+    mealHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 },
+    mealTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
+    mealHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    mealKcal: { color: colors.textSecondary, fontSize: 13 },
+    foodRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
+    foodName: { color: colors.text, fontSize: 14, fontWeight: '500' },
+    foodGrams: { color: colors.textSecondary, fontSize: 12, marginTop: 1 },
+    foodKcal: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
+    addFoodBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
+    addFoodText: { color: colors.textSecondary, fontSize: 13 },
+  });
+}
+
+function MacroBar({ label, current, goal, color, unit = 'g', styles: st }: { label: string; current: number; goal: number; color: string; unit?: string; styles: ReturnType<typeof getNutStyles> }) {
   const pct = Math.min(current / goal, 1);
   return (
-    <View style={nutStyles.macroRow}>
-      <Text style={nutStyles.macroLabel}>{label}</Text>
-      <View style={nutStyles.barContainer}>
-        <View style={[nutStyles.barFill, { width: `${pct * 100}%` as any, backgroundColor: color }]} />
+    <View style={st.macroRow}>
+      <Text style={st.macroLabel}>{label}</Text>
+      <View style={st.barContainer}>
+        <View style={[st.barFill, { width: `${pct * 100}%` as any, backgroundColor: color }]} />
       </View>
-      <Text style={nutStyles.macroValue}>
-        {Math.round(current)}/{goal}{unit}
-      </Text>
+      <Text style={st.macroValue}>{Math.round(current)}/{goal}{unit}</Text>
     </View>
   );
 }
 
-function MealSection({ mealType }: { mealType: MealType }) {
+function MealSection({ mealType, styles: st, colors }: { mealType: MealType; styles: ReturnType<typeof getNutStyles>; colors: ThemeColors }) {
   const { meals, getMealTotals } = useNutritionStore();
   const [expanded, setExpanded] = useState(true);
   const items = meals.filter((m) => m.mealType === mealType);
   const totals = getMealTotals(mealType);
-
   return (
-    <View style={nutStyles.mealSection}>
-      <TouchableOpacity
-        style={nutStyles.mealHeader}
-        onPress={() => setExpanded((e) => !e)}
-      >
-        <Text style={nutStyles.mealTitle}>{MEAL_LABELS[mealType]}</Text>
-        <View style={nutStyles.mealHeaderRight}>
-          <Text style={nutStyles.mealKcal}>{Math.round(totals.calories)} kcal</Text>
-          <Ionicons
-            name={expanded ? 'chevron-up' : 'chevron-down'}
-            size={16}
-            color={Colors.textSecondary}
-          />
+    <View style={st.mealSection}>
+      <TouchableOpacity style={st.mealHeader} onPress={() => setExpanded((e) => !e)}>
+        <Text style={st.mealTitle}>{MEAL_LABELS[mealType]}</Text>
+        <View style={st.mealHeaderRight}>
+          <Text style={st.mealKcal}>{Math.round(totals.calories)} kcal</Text>
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
         </View>
       </TouchableOpacity>
-
       {expanded && (
         <View>
           {items.map((m) => {
-            const ratio =
-              m.foodItem.servingUnit === 'g'
-                ? m.quantity / m.foodItem.servingSize
-                : m.quantity;
+            const ratio = m.foodItem.servingUnit === 'g' ? m.quantity / m.foodItem.servingSize : m.quantity;
             const kcal = Math.round(m.foodItem.calories * ratio);
             return (
-              <View key={m.id} style={nutStyles.foodRow}>
+              <View key={m.id} style={st.foodRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={nutStyles.foodName}>{m.foodItem.name}</Text>
-                  <Text style={nutStyles.foodGrams}>
-                    {m.quantity}{m.foodItem.servingUnit}
-                  </Text>
+                  <Text style={st.foodName}>{m.foodItem.name}</Text>
+                  <Text style={st.foodGrams}>{m.quantity}{m.foodItem.servingUnit}</Text>
                 </View>
-                <Text style={nutStyles.foodKcal}>{kcal} kcal</Text>
+                <Text style={st.foodKcal}>{kcal} kcal</Text>
               </View>
             );
           })}
-          <TouchableOpacity style={nutStyles.addFoodBtn}>
-            <Ionicons name="add" size={14} color={Colors.textSecondary} />
-            <Text style={nutStyles.addFoodText}>Ajouter un aliment</Text>
+          <TouchableOpacity style={st.addFoodBtn}>
+            <Ionicons name="add" size={14} color={colors.textSecondary} />
+            <Text style={st.addFoodText}>Ajouter un aliment</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1337,157 +871,28 @@ function MealSection({ mealType }: { mealType: MealType }) {
 function NutritionContent() {
   const { getTotals, goals } = useNutritionStore();
   const totals = getTotals();
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const nutStyles = useMemo(() => getNutStyles(colors), [isDark]);
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={nutStyles.container}>
       {/* Macro summary */}
       <View style={nutStyles.summaryCard}>
         <Text style={nutStyles.summaryTitle}>Macros du jour</Text>
-        <MacroBar
-          label="Proteines"
-          current={totals.protein}
-          goal={goals.protein}
-          color="#3B82F6"
-        />
-        <MacroBar
-          label="Glucides"
-          current={totals.carbs}
-          goal={goals.carbs}
-          color={Colors.accentOrange}
-        />
-        <MacroBar
-          label="Lipides"
-          current={totals.fat}
-          goal={goals.fat}
-          color="#EF4444"
-        />
-        <MacroBar
-          label="Calories"
-          current={totals.calories}
-          goal={goals.calories}
-          color={Colors.accent}
-          unit=" kcal"
-        />
+        <MacroBar label="Proteines" current={totals.protein} goal={goals.protein} color="#3B82F6" styles={nutStyles} />
+        <MacroBar label="Glucides" current={totals.carbs} goal={goals.carbs} color={colors.accentOrange} styles={nutStyles} />
+        <MacroBar label="Lipides" current={totals.fat} goal={goals.fat} color="#EF4444" styles={nutStyles} />
+        <MacroBar label="Calories" current={totals.calories} goal={goals.calories} color={colors.accent} unit=" kcal" styles={nutStyles} />
       </View>
-
-      {/* Meal sections */}
       {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((mt) => (
-        <MealSection key={mt} mealType={mt} />
+        <MealSection key={mt} mealType={mt} styles={nutStyles} colors={colors} />
       ))}
 
       <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
-
-const nutStyles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-  summaryCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    gap: 10,
-  },
-  summaryTitle: {
-    color: Colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  macroRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  macroLabel: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    width: 80,
-  },
-  barContainer: {
-    flex: 1,
-    height: 6,
-    backgroundColor: Colors.cardAlt,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  macroValue: {
-    color: Colors.text,
-    fontSize: 12,
-    fontWeight: '600',
-    width: 80,
-    textAlign: 'right',
-  },
-  mealSection: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    marginBottom: 10,
-    overflow: 'hidden',
-  },
-  mealHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 14,
-  },
-  mealTitle: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  mealHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  mealKcal: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-  },
-  foodRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.separator,
-  },
-  foodName: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  foodGrams: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    marginTop: 1,
-  },
-  foodKcal: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  addFoodBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.separator,
-  },
-  addFoodText: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-  },
-});
 
 // ─── TAB: EAU ─────────────────────────────────────────────────────────────────
 
@@ -1496,8 +901,38 @@ const WATER_GAUGE_STROKE = 18;
 const WATER_RADIUS = (WATER_GAUGE_SIZE - WATER_GAUGE_STROKE) / 2;
 const WATER_CIRCUMFERENCE = 2 * Math.PI * WATER_RADIUS;
 
+function getWaterStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { padding: 16, alignItems: 'center' },
+    gaugeWrapper: { width: WATER_GAUGE_SIZE, height: WATER_GAUGE_SIZE, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+    gaugeInner: { position: 'absolute', alignItems: 'center' },
+    gaugeMain: { color: colors.text, fontSize: 32, fontWeight: '800' },
+    gaugeGoal: { color: colors.textSecondary, fontSize: 14, marginTop: 2 },
+    gaugePct: { color: colors.accent, fontSize: 16, fontWeight: '700', marginTop: 4 },
+    quickAddRow: { flexDirection: 'row', gap: 10, marginBottom: 16, width: '100%' },
+    quickBtn: { flex: 1, backgroundColor: colors.card, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+    quickBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    historyCard: { width: '100%', backgroundColor: colors.card, borderRadius: 12, marginBottom: 16, overflow: 'hidden' },
+    historyTitle: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+    entryRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
+    entryTime: { color: colors.textSecondary, fontSize: 13, width: 50, fontVariant: ['tabular-nums'] },
+    entryAmount: { color: colors.text, fontSize: 14, fontWeight: '600', flex: 1 },
+    deleteBtn: { padding: 6 },
+    chartCard: { width: '100%', backgroundColor: colors.card, borderRadius: 12, padding: 16 },
+    chartTitle: { color: colors.text, fontSize: 15, fontWeight: '600', marginBottom: 16 },
+    chart: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 100 },
+    barCol: { alignItems: 'center', flex: 1 },
+    barTrack: { height: 80, width: 24, borderRadius: 6, backgroundColor: colors.cardAlt, justifyContent: 'flex-end', overflow: 'hidden', marginBottom: 6 },
+    barFill: { width: '100%', borderRadius: 6 },
+    barDay: { color: colors.textSecondary, fontSize: 11, fontWeight: '500' },
+  });
+}
+
 function WaterContent() {
   const { current, goal, weekHistory, entries, addWater, removeEntry } = useWaterStore();
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const waterStyles = useMemo(() => getWaterStyles(colors), [isDark]);
   const pct = Math.min(current / goal, 1);
   const strokeDash = WATER_CIRCUMFERENCE * pct;
   const maxBar = Math.max(...weekHistory.map((d) => d.amount), 1);
@@ -1505,24 +940,14 @@ function WaterContent() {
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={waterStyles.container}>
-      {/* Circular gauge */}
       <View style={waterStyles.gaugeWrapper}>
         <Svg width={WATER_GAUGE_SIZE} height={WATER_GAUGE_SIZE}>
-          {/* Background circle */}
+          <Circle cx={WATER_GAUGE_SIZE / 2} cy={WATER_GAUGE_SIZE / 2} r={WATER_RADIUS} stroke={colors.card} strokeWidth={WATER_GAUGE_STROKE} fill="none" />
           <Circle
             cx={WATER_GAUGE_SIZE / 2}
             cy={WATER_GAUGE_SIZE / 2}
             r={WATER_RADIUS}
-            stroke={Colors.card}
-            strokeWidth={WATER_GAUGE_STROKE}
-            fill="none"
-          />
-          {/* Progress circle */}
-          <Circle
-            cx={WATER_GAUGE_SIZE / 2}
-            cy={WATER_GAUGE_SIZE / 2}
-            r={WATER_RADIUS}
-            stroke={Colors.accent}
+            stroke={colors.accent}
             strokeWidth={WATER_GAUGE_STROKE}
             fill="none"
             strokeDasharray={`${strokeDash} ${WATER_CIRCUMFERENCE}`}
@@ -1595,7 +1020,7 @@ function WaterContent() {
                   <View
                     style={[
                       waterStyles.barFill,
-                      { height: h, backgroundColor: isGoal ? Colors.accent : Colors.cardAlt },
+                      { height: h, backgroundColor: isGoal ? colors.accent : colors.cardAlt },
                     ]}
                   />
                 </View>
@@ -1618,306 +1043,92 @@ function WaterContent() {
   );
 }
 
-const waterStyles = StyleSheet.create({
-  container: {
-    padding: 16,
-    alignItems: 'center',
-  },
-  gaugeWrapper: {
-    width: WATER_GAUGE_SIZE,
-    height: WATER_GAUGE_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  gaugeInner: {
-    position: 'absolute',
-    alignItems: 'center',
-  },
-  gaugeMain: {
-    color: Colors.text,
-    fontSize: 32,
-    fontWeight: '800',
-  },
-  gaugeGoal: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    marginTop: 2,
-  },
-  gaugePct: {
-    color: Colors.accent,
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  quickAddRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-    width: '100%',
-  },
-  quickBtn: {
-    flex: 1,
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  quickBtnText: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  historyCard: {
-    width: '100%',
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  historyTitle: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  entryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.separator,
-  },
-  entryTime: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    width: 50,
-    fontVariant: ['tabular-nums'],
-  },
-  entryAmount: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
-  deleteBtn: {
-    padding: 6,
-  },
-  chartCard: {
-    width: '100%',
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 16,
-  },
-  chartTitle: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  chart: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    height: 100,
-  },
-  barCol: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  barTrack: {
-    height: 80,
-    width: 24,
-    borderRadius: 6,
-    backgroundColor: Colors.cardAlt,
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-    marginBottom: 6,
-  },
-  barFill: {
-    width: '100%',
-    borderRadius: 6,
-  },
-  barDay: {
-    color: Colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '500',
-  },
-});
-
 // ─── TAB: PROGRAMME ───────────────────────────────────────────────────────────
 
-const TODAY_INDEX = new Date().getDay(); // 0=Sun, 1=Mon…
-// Map JS day (0=Sun) to our weeklyProgram index (0=Mon)
+const TODAY_INDEX = new Date().getDay();
 const todayProgramIndex = TODAY_INDEX === 0 ? 6 : TODAY_INDEX - 1;
 
+function getProgStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { padding: 16 },
+    headerCard: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.accent },
+    programName: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 4 },
+    programMeta: { color: colors.textSecondary, fontSize: 13 },
+    dayCard: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'transparent' },
+    dayCardToday: { borderColor: colors.cardAlt, backgroundColor: colors.cardAlt },
+    dayLeft: { width: 40, alignItems: 'center' },
+    dayShort: { fontSize: 13, fontWeight: '700' },
+    todayDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.accent, marginTop: 3 },
+    dayCenter: { flex: 1, marginLeft: 10 },
+    dayLabel: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 2 },
+    dayExCount: { color: colors.textSecondary, fontSize: 12 },
+    reposBadge: { backgroundColor: colors.tagGreenBg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+    reposBadgeText: { color: colors.accent, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+    launchBtn: { backgroundColor: colors.cta, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 16 },
+    launchBtnText: { color: colors.ctaText, fontSize: 16, fontWeight: '700' },
+  });
+}
+
 function ProgrammeContent() {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const progStyles = useMemo(() => getProgStyles(colors), [isDark]);
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={progStyles.container}>
-      {/* Active program header */}
       <View style={progStyles.headerCard}>
         <Text style={progStyles.programName}>PPL — 3 jours/semaine</Text>
         <Text style={progStyles.programMeta}>6 jours · Push / Pull / Legs</Text>
       </View>
-
-      {/* Days list */}
       {weeklyProgram.map((day, i) => {
         const isToday = i === todayProgramIndex;
         const isRest = day.type === 'rest';
         return (
-          <View
-            key={day.day}
-            style={[
-              progStyles.dayCard,
-              isToday && progStyles.dayCardToday,
-            ]}
-          >
+          <View key={day.day} style={[progStyles.dayCard, isToday && progStyles.dayCardToday]}>
             <View style={progStyles.dayLeft}>
-              <Text style={[progStyles.dayShort, { color: day.color }]}>
-                {day.shortDay}
-              </Text>
-              {isToday && (
-                <View style={progStyles.todayDot} />
-              )}
+              <Text style={[progStyles.dayShort, { color: day.color }]}>{day.shortDay}</Text>
+              {isToday && <View style={progStyles.todayDot} />}
             </View>
             <View style={progStyles.dayCenter}>
               <Text style={progStyles.dayLabel}>{day.label}</Text>
-              <Text style={progStyles.dayExCount}>
-                {isRest ? 'Journee de recuperation' : `${day.exercises.length} exercices`}
-              </Text>
+              <Text style={progStyles.dayExCount}>{isRest ? 'Journee de recuperation' : `${day.exercises.length} exercices`}</Text>
             </View>
             {isRest ? (
               <View style={progStyles.reposBadge}>
                 <Text style={progStyles.reposBadgeText}>REPOS</Text>
               </View>
             ) : (
-              <Ionicons
-                name="chevron-forward"
-                size={16}
-                color={Colors.textTertiary}
-              />
+              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
             )}
           </View>
         );
       })}
-
-      {/* CTA */}
       <TouchableOpacity style={progStyles.launchBtn}>
         <Text style={progStyles.launchBtnText}>Lancer la seance du jour</Text>
       </TouchableOpacity>
-
       <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
 
-const progStyles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-  headerCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.accent,
-  },
-  programName: {
-    color: Colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  programMeta: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-  },
-  dayCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  dayCardToday: {
-    borderColor: Colors.cardAlt,
-    backgroundColor: '#232323',
-  },
-  dayLeft: {
-    width: 40,
-    alignItems: 'center',
-  },
-  dayShort: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  todayDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: Colors.accent,
-    marginTop: 3,
-  },
-  dayCenter: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  dayLabel: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  dayExCount: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-  },
-  reposBadge: {
-    backgroundColor: Colors.tagGreenBg,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  reposBadgeText: {
-    color: Colors.accent,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  launchBtn: {
-    backgroundColor: Colors.cta,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  launchBtnText: {
-    color: Colors.ctaText,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-});
-
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 
 export default function SeanceScreen() {
   const [activeTab, setActiveTab] = useState<SeanceTab>('seance');
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { flex: 1, backgroundColor: colors.background },
+        content: { flex: 1 },
+      }),
+    [isDark]
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
-
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <SubTabBar active={activeTab} onPress={setActiveTab} />
-
       <View style={styles.content}>
         {activeTab === 'seance' && <SeanceContent />}
         {activeTab === 'chrono' && <ChronoContent />}
@@ -1928,13 +1139,3 @@ export default function SeanceScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    flex: 1,
-  },
-});
