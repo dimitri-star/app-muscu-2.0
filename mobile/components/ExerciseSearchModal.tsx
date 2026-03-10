@@ -9,6 +9,7 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../store/theme';
@@ -21,7 +22,7 @@ interface ExerciseItem {
   equipment: string;
 }
 
-const EXERCISES: ExerciseItem[] = [
+const DEFAULT_EXERCISES: ExerciseItem[] = [
   { id: 'e1', name: 'Developpe couche', muscle: 'Pectoraux', equipment: 'Barre' },
   { id: 'e2', name: 'Developpe incline halteres', muscle: 'Pectoraux', equipment: 'Halteres' },
   { id: 'e3', name: 'Ecartes poulie basse', muscle: 'Pectoraux', equipment: 'Cable' },
@@ -52,9 +53,19 @@ const EXERCISES: ExerciseItem[] = [
   { id: 'e28', name: 'Ab wheel', muscle: 'Abdos', equipment: 'Ab wheel' },
   { id: 'e29', name: 'Hip thrust', muscle: 'Fessiers', equipment: 'Barre' },
   { id: 'e30', name: 'Face pull', muscle: 'Epaules', equipment: 'Cable' },
+  { id: 'e31', name: 'Curl inversé barre', muscle: 'Avant-bras', equipment: 'Barre' },
+  { id: 'e32', name: 'Curl inversé haltères', muscle: 'Avant-bras', equipment: 'Halteres' },
+  { id: 'e33', name: 'Flexion poignets barre', muscle: 'Avant-bras', equipment: 'Barre' },
+  { id: 'e34', name: 'Extension poignets barre', muscle: 'Avant-bras', equipment: 'Barre' },
+  { id: 'e35', name: 'Rotation pronation/supination', muscle: 'Avant-bras', equipment: 'Halteres' },
+  { id: 'e36', name: 'Farmer carry', muscle: 'Avant-bras', equipment: 'Halteres' },
+  { id: 'e37', name: 'Dead hang', muscle: 'Avant-bras', equipment: 'Barre de traction' },
 ];
 
-const FILTER_PILLS = ['Tous', 'Pectoraux', 'Dos', 'Epaules', 'Biceps', 'Triceps', 'Jambes', 'Abdos'];
+const FILTER_PILLS = ['Tous', 'Pectoraux', 'Dos', 'Epaules', 'Biceps', 'Triceps', 'Avant-bras', 'Jambes', 'Abdos', 'Fessiers'];
+
+const MUSCLE_OPTIONS = ['Pectoraux', 'Dos', 'Epaules', 'Biceps', 'Triceps', 'Avant-bras', 'Jambes', 'Abdos', 'Fessiers', 'Autre'];
+const EQUIPMENT_OPTIONS = ['Barre', 'Halteres', 'Cable', 'Machine', 'Poids de corps', 'Barre de traction', 'Autre'];
 
 interface ExerciseSearchModalProps {
   visible: boolean;
@@ -70,11 +81,25 @@ export default function ExerciseSearchModal({
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
 
+  // Search state
   const [searchText, setSearchText] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState('Tous');
 
+  // Custom exercises added this session
+  const [customExercises, setCustomExercises] = useState<ExerciseItem[]>([]);
+
+  // Create mode
+  const [showCreate, setShowCreate] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createMuscle, setCreateMuscle] = useState('Pectoraux');
+  const [createEquipment, setCreateEquipment] = useState('Barre');
+  const [showMusclePicker, setShowMusclePicker] = useState(false);
+  const [showEquipmentPicker, setShowEquipmentPicker] = useState(false);
+
+  const allExercises = useMemo(() => [...DEFAULT_EXERCISES, ...customExercises], [customExercises]);
+
   const filtered = useMemo(() => {
-    return EXERCISES.filter((ex) => {
+    return allExercises.filter((ex) => {
       const matchesSearch =
         searchText.trim() === '' ||
         ex.name.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -83,7 +108,37 @@ export default function ExerciseSearchModal({
         selectedMuscle === 'Tous' || ex.muscle === selectedMuscle;
       return matchesSearch && matchesMuscle;
     });
-  }, [searchText, selectedMuscle]);
+  }, [searchText, selectedMuscle, allExercises]);
+
+  const handleCreateSave = () => {
+    if (createName.trim().length < 2) {
+      Alert.alert('Nom requis', 'Entre un nom d\'exercice (minimum 2 caracteres).');
+      return;
+    }
+    const newEx: ExerciseItem = {
+      id: `custom_${Date.now()}`,
+      name: createName.trim(),
+      muscle: createMuscle,
+      equipment: createEquipment,
+    };
+    setCustomExercises((prev) => [...prev, newEx]);
+    onSelect(newEx);
+    onClose();
+    // reset form
+    setCreateName('');
+    setCreateMuscle('Pectoraux');
+    setCreateEquipment('Barre');
+    setShowCreate(false);
+  };
+
+  const handleClose = () => {
+    setShowCreate(false);
+    setSearchText('');
+    setSelectedMuscle('Tous');
+    setShowMusclePicker(false);
+    setShowEquipmentPicker(false);
+    onClose();
+  };
 
   const renderItem = ({ item }: { item: ExerciseItem }) => (
     <View style={[styles.exerciseRow, { borderBottomColor: colors.separator }]}>
@@ -92,7 +147,9 @@ export default function ExerciseSearchModal({
       </View>
       <View style={styles.exerciseInfo}>
         <Text style={[styles.exerciseName, { color: colors.text }]}>{item.name}</Text>
-        <Text style={[styles.exerciseMuscle, { color: colors.textSecondary }]}>{item.muscle}</Text>
+        <Text style={[styles.exerciseMuscle, { color: colors.textSecondary }]}>
+          {item.muscle} · {item.equipment}
+        </Text>
       </View>
       <TouchableOpacity
         style={[styles.addBtn, { backgroundColor: colors.accent }]}
@@ -111,90 +168,185 @@ export default function ExerciseSearchModal({
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Header */}
+
+        {/* ── Header ── */}
         <View style={[styles.header, { borderBottomColor: colors.separator }]}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Choisir un exercice</Text>
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+          {showCreate ? (
+            <TouchableOpacity style={styles.backBtn} onPress={() => setShowCreate(false)}>
+              <Ionicons name="chevron-back" size={22} color={colors.text} />
+              <Text style={[styles.backText, { color: colors.text }]}>Retour</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Choisir un exercice</Text>
+          )}
+          <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
             <Ionicons name="close" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
 
-        {/* Search bar */}
-        <View style={[styles.searchBar, { backgroundColor: colors.input }]}>
-          <Ionicons name="search" size={18} color={colors.textSecondary} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
-            placeholder="Rechercher un exercice..."
-            placeholderTextColor={colors.textTertiary}
-            value={searchText}
-            onChangeText={setSearchText}
-            autoCorrect={false}
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')}>
-              <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+        {showCreate ? (
+          /* ── Create form ── */
+          <ScrollView contentContainerStyle={styles.createContainer} keyboardShouldPersistTaps="handled">
+            <Text style={[styles.createSectionLabel, { color: colors.textSecondary }]}>NOM DE L'EXERCICE</Text>
+            <TextInput
+              style={[styles.createInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.separator }]}
+              placeholder="Ex: Curl concentration..."
+              placeholderTextColor={colors.textTertiary}
+              value={createName}
+              onChangeText={setCreateName}
+              autoFocus
+              autoCorrect={false}
+            />
+
+            <Text style={[styles.createSectionLabel, { color: colors.textSecondary, marginTop: 20 }]}>GROUPE MUSCULAIRE</Text>
+            <TouchableOpacity
+              style={[styles.pickerBtn, { backgroundColor: colors.card, borderColor: colors.separator }]}
+              onPress={() => { setShowMusclePicker((v) => !v); setShowEquipmentPicker(false); }}
+            >
+              <Text style={[styles.pickerBtnText, { color: colors.text }]}>{createMuscle}</Text>
+              <Ionicons name={showMusclePicker ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
             </TouchableOpacity>
-          )}
-        </View>
+            {showMusclePicker && (
+              <View style={[styles.pickerList, { backgroundColor: colors.card, borderColor: colors.separator }]}>
+                {MUSCLE_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.pickerOption, { borderBottomColor: colors.separator }]}
+                    onPress={() => { setCreateMuscle(opt); setShowMusclePicker(false); }}
+                  >
+                    <Text style={[styles.pickerOptionText, { color: createMuscle === opt ? colors.accent : colors.text }]}>{opt}</Text>
+                    {createMuscle === opt && <Ionicons name="checkmark" size={18} color={colors.accent} />}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
-        {/* Filter pills */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.pillsRow}
-        >
-          {FILTER_PILLS.map((pill) => {
-            const isActive = selectedMuscle === pill;
-            return (
-              <TouchableOpacity
-                key={pill}
-                style={[
-                  styles.pill,
-                  { backgroundColor: isActive ? colors.accent : colors.cardAlt },
-                ]}
-                onPress={() => setSelectedMuscle(pill)}
-              >
-                <Text
-                  style={[
-                    styles.pillText,
-                    { color: isActive ? '#000000' : colors.textSecondary },
-                  ]}
-                >
-                  {pill}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+            <Text style={[styles.createSectionLabel, { color: colors.textSecondary, marginTop: 20 }]}>EQUIPEMENT</Text>
+            <TouchableOpacity
+              style={[styles.pickerBtn, { backgroundColor: colors.card, borderColor: colors.separator }]}
+              onPress={() => { setShowEquipmentPicker((v) => !v); setShowMusclePicker(false); }}
+            >
+              <Text style={[styles.pickerBtnText, { color: colors.text }]}>{createEquipment}</Text>
+              <Ionicons name={showEquipmentPicker ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+            {showEquipmentPicker && (
+              <View style={[styles.pickerList, { backgroundColor: colors.card, borderColor: colors.separator }]}>
+                {EQUIPMENT_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.pickerOption, { borderBottomColor: colors.separator }]}
+                    onPress={() => { setCreateEquipment(opt); setShowEquipmentPicker(false); }}
+                  >
+                    <Text style={[styles.pickerOptionText, { color: createEquipment === opt ? colors.accent : colors.text }]}>{opt}</Text>
+                    {createEquipment === opt && <Ionicons name="checkmark" size={18} color={colors.accent} />}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
-        {/* List */}
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          keyboardShouldPersistTaps="handled"
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="search-outline" size={48} color={colors.textTertiary} />
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                Aucun exercice trouve
-              </Text>
+            <TouchableOpacity
+              style={[styles.saveBtn, { backgroundColor: colors.accent }]}
+              onPress={handleCreateSave}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.saveBtnText}>Ajouter l'exercice</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        ) : (
+          /* ── Search view ── */
+          <>
+            {/* Search bar */}
+            <View style={[styles.searchBar, { backgroundColor: colors.input }]}>
+              <Ionicons name="search" size={18} color={colors.textSecondary} />
+              <TextInput
+                style={[styles.searchInput, { color: colors.text }]}
+                placeholder="Rechercher un exercice..."
+                placeholderTextColor={colors.textTertiary}
+                value={searchText}
+                onChangeText={setSearchText}
+                autoCorrect={false}
+              />
+              {searchText.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchText('')}>
+                  <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
             </View>
-          }
-        />
+
+            {/* Filter pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.pillsRow}
+            >
+              {FILTER_PILLS.map((pill) => {
+                const isActive = selectedMuscle === pill;
+                return (
+                  <TouchableOpacity
+                    key={pill}
+                    style={[
+                      styles.pill,
+                      { backgroundColor: isActive ? colors.accent : colors.cardAlt },
+                    ]}
+                    onPress={() => setSelectedMuscle(pill)}
+                  >
+                    <Text style={[styles.pillText, { color: isActive ? '#000000' : colors.textSecondary }]}>
+                      {pill}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* List */}
+            <FlatList
+              data={filtered}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              contentContainerStyle={styles.list}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Ionicons name="search-outline" size={48} color={colors.textTertiary} />
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    Aucun exercice trouve
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.emptyCreateBtn, { backgroundColor: colors.accent }]}
+                    onPress={() => {
+                      setCreateName(searchText);
+                      setShowCreate(true);
+                    }}
+                  >
+                    <Text style={styles.emptyCreateBtnText}>Creer "{searchText || 'un exercice'}"</Text>
+                  </TouchableOpacity>
+                </View>
+              }
+            />
+
+            {/* Footer: create button */}
+            <View style={[styles.footer, { borderTopColor: colors.separator, backgroundColor: colors.background }]}>
+              <TouchableOpacity
+                style={[styles.createBtn, { borderColor: colors.text }]}
+                onPress={() => setShowCreate(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="add-circle-outline" size={18} color={colors.text} />
+                <Text style={[styles.createBtnText, { color: colors.text }]}>Creer un exercice personnalise</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </SafeAreaView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -203,13 +355,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  closeBtn: {
-    padding: 4,
-  },
+  headerTitle: { fontSize: 18, fontWeight: '700' },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  backText: { fontSize: 16, fontWeight: '500' },
+  closeBtn: { padding: 4 },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -220,27 +369,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 8,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-  },
-  pillsRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
-  },
-  pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  pillText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  list: {
-    paddingHorizontal: 16,
-  },
+  searchInput: { flex: 1, fontSize: 15 },
+  pillsRow: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
+  pill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  pillText: { fontSize: 13, fontWeight: '500' },
+  list: { paddingHorizontal: 16 },
   exerciseRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -255,17 +388,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  exerciseInfo: {
-    flex: 1,
-  },
-  exerciseName: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  exerciseMuscle: {
-    fontSize: 12,
-  },
+  exerciseInfo: { flex: 1 },
+  exerciseName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  exerciseMuscle: { fontSize: 12 },
   addBtn: {
     width: 32,
     height: 32,
@@ -273,12 +398,76 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyState: {
+  emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
+  emptyText: { fontSize: 15 },
+  emptyCreateBtn: {
+    marginTop: 8,
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  emptyCreateBtnText: { color: '#000000', fontSize: 14, fontWeight: '700' },
+  footer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  createBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 60,
-    gap: 12,
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 13,
   },
-  emptyText: {
-    fontSize: 15,
+  createBtnText: { fontSize: 15, fontWeight: '600' },
+  // Create form
+  createContainer: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 40 },
+  createSectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 8,
   },
+  createInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    fontSize: 16,
+  },
+  pickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  pickerBtnText: { fontSize: 15, fontWeight: '500' },
+  pickerList: {
+    borderWidth: 1,
+    borderRadius: 12,
+    marginTop: 4,
+    overflow: 'hidden',
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  pickerOptionText: { fontSize: 15 },
+  saveBtn: {
+    marginTop: 32,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  saveBtnText: { color: '#000000', fontSize: 16, fontWeight: '700' },
 });

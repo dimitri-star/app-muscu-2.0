@@ -83,6 +83,10 @@ export default function SaveWorkoutModal({
   const [effortRating, setEffortRating] = useState(0);
   const [energyRating, setEnergyRating] = useState(0);
   const [moodRating, setMoodRating] = useState(0);
+  const [sleepHours, setSleepHours] = useState('');
+  const [sleepQuality, setSleepQuality] = useState(0);
+  const [morningEnergy, setMorningEnergy] = useState(0);
+  const [soreness, setSoreness] = useState(0);
   const [visibility, setVisibility] = useState<VisibilityOption>('Tout le monde');
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
   const [photoAdded, setPhotoAdded] = useState(false);
@@ -305,6 +309,75 @@ export default function SaveWorkoutModal({
             </View>
           </View>
 
+          {/* Recovery */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Récupération</Text>
+
+            <View style={[styles.ratingCard, { backgroundColor: colors.card }]}>
+              {/* Sleep */}
+              <View style={styles.sleepRow}>
+                <View style={styles.sleepLeft}>
+                  <Text style={[styles.ratingTitle, { color: colors.text }]}>Sommeil</Text>
+                  <TextInput
+                    style={[styles.sleepInput, { backgroundColor: colors.input, color: colors.text }]}
+                    value={sleepHours}
+                    onChangeText={setSleepHours}
+                    placeholder="0h"
+                    placeholderTextColor={colors.textTertiary}
+                    keyboardType="decimal-pad"
+                    maxLength={4}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.ratingTitle, { color: colors.text }]}>Qualité sommeil</Text>
+                  <View style={styles.ratingRow}>
+                    {Array.from({ length: 5 }, (_, i) => i + 1).map((n) => (
+                      <TouchableOpacity
+                        key={n}
+                        style={[styles.ratingPill, { backgroundColor: sleepQuality === n ? colors.sliderActive : colors.sliderInactive }]}
+                        onPress={() => setSleepQuality(n)}
+                      >
+                        <Text style={[styles.ratingPillText, { color: sleepQuality === n ? '#000000' : colors.textSecondary }]}>{n}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.subRatingRow}>
+                <View style={styles.subRatingBlock}>
+                  <Text style={[styles.ratingTitle, { color: colors.text }]}>Énergie matin</Text>
+                  <View style={styles.ratingRow}>
+                    {Array.from({ length: 5 }, (_, i) => i + 1).map((n) => (
+                      <TouchableOpacity
+                        key={n}
+                        style={[styles.ratingPill, { backgroundColor: morningEnergy === n ? colors.sliderActive : colors.sliderInactive }]}
+                        onPress={() => setMorningEnergy(n)}
+                      >
+                        <Text style={[styles.ratingPillText, { color: morningEnergy === n ? '#000000' : colors.textSecondary }]}>{n}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.subRatingBlock}>
+                  <Text style={[styles.ratingTitle, { color: colors.text }]}>Courbatures</Text>
+                  <View style={styles.ratingRow}>
+                    {Array.from({ length: 5 }, (_, i) => i + 1).map((n) => (
+                      <TouchableOpacity
+                        key={n}
+                        style={[styles.ratingPill, { backgroundColor: soreness === n ? '#FF6B3520' : colors.sliderInactive }]}
+                        onPress={() => setSoreness(n)}
+                      >
+                        <Text style={[styles.ratingPillText, { color: soreness === n ? '#FF6B35' : colors.textSecondary }]}>{n}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+
           {/* Visibility */}
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Visibilite</Text>
@@ -506,6 +579,25 @@ const styles = StyleSheet.create({
   },
   subRatingBlock: {
     flex: 1,
+  },
+  sleepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    marginBottom: 14,
+  },
+  sleepLeft: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  sleepInput: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 18,
+    fontWeight: '700',
+    width: 56,
+    textAlign: 'center',
   },
   visibilityBtn: {
     flexDirection: 'row',

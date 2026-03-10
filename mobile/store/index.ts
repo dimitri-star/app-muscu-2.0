@@ -30,13 +30,13 @@ const initialEntries: WaterEntry[] = [
 ];
 
 const initialWeekHistory = [
-  { day: 'Lun', amount: 2800, goal: 3000 },
-  { day: 'Mar', amount: 3000, goal: 3000 },
-  { day: 'Mer', amount: 2200, goal: 3000 },
-  { day: 'Jeu', amount: 3000, goal: 3000 },
-  { day: 'Ven', amount: 2600, goal: 3000 },
-  { day: 'Sam', amount: 1800, goal: 3000 },
-  { day: 'Dim', amount: 1500, goal: 3000 },
+  { day: 'Mar', amount: 2800, goal: 3100 },
+  { day: 'Mer', amount: 3100, goal: 3100 },
+  { day: 'Jeu', amount: 3100, goal: 3100 },
+  { day: 'Ven', amount: 2400, goal: 3100 },
+  { day: 'Sam', amount: 3100, goal: 3100 },
+  { day: 'Dim', amount: 2600, goal: 3100 },
+  { day: 'Lun', amount: 3100, goal: 3100 },
 ];
 
 export const useWaterStore = create<WaterState>((set, get) => ({
@@ -93,7 +93,9 @@ interface WorkoutState {
   addSet: (exerciseId: string) => void;
   removeSet: (exerciseId: string, setId: string) => void;
   addExercise: (exercise: import('../constants/mockData').Exercise) => void;
+  addExerciseFromProgram: (exercise: import('../constants/mockData').Exercise, numSets: number, reps: number, restTime: number, notes?: string) => void;
   removeExercise: (exerciseId: string) => void;
+  clearExercises: () => void;
   updateRestTime: (exerciseId: string, restTime: number) => void;
   updateNotes: (exerciseId: string, notes: string) => void;
   startRestTimer: (seconds: number) => void;
@@ -102,9 +104,9 @@ interface WorkoutState {
 }
 
 export const useWorkoutStore = create<WorkoutState>((set, get) => ({
-  isActive: true,
-  timerSeconds: 1052,
-  workoutName: 'Push — Poitrine & Triceps',
+  isActive: false,
+  timerSeconds: 0,
+  workoutName: 'Mar — Dips Volume & Épaules',
   exercises: todayWorkout,
   restTimerActive: false,
   restTimerSeconds: 90,
@@ -171,10 +173,35 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       ],
     })),
 
+  addExerciseFromProgram: (exercise, numSets, reps, restTime, notes = '') =>
+    set((state) => {
+      const ts = Date.now();
+      const rand = Math.random().toString(36).slice(2, 7);
+      return {
+        exercises: [
+          ...state.exercises,
+          {
+            id: `ex_${ts}_${rand}`,
+            exercise,
+            sets: Array.from({ length: numSets }, (_, i) => ({
+              id: `set_${ts}_${rand}_${i}`,
+              reps,
+              weight: 0,
+              done: false,
+            })),
+            restTime,
+            notes,
+          },
+        ],
+      };
+    }),
+
   removeExercise: (exerciseId) =>
     set((state) => ({
       exercises: state.exercises.filter((ex) => ex.id !== exerciseId),
     })),
+
+  clearExercises: () => set({ exercises: [] }),
 
   updateRestTime: (exerciseId, restTime) =>
     set((state) => ({
@@ -310,4 +337,100 @@ export const useProgramStore = create<ProgramState>((set) => ({
       set({ isLoading: false, syncError: true });
     }
   },
+}));
+
+// ─── GAMIFICATION STORE ────────────────────────────────────────────────────────
+
+export interface Badge {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  condition: string;
+  unlocked: boolean;
+  unlockedDate?: string;
+  category: 'workout' | 'water' | 'general';
+}
+
+interface GamificationState {
+  workoutStreakWeeks: number;
+  workoutStreakTarget: number;
+  workoutsThisWeek: number;
+  waterStreakDays: number;
+  totalXp: number;
+  level: string;
+  xpToNextLevel: number;
+  badges: Badge[];
+  addXp: (amount: number) => void;
+  completeWaterGoal: () => void;
+  completeWorkout: () => void;
+}
+
+const XP_LEVELS = [
+  { name: 'Débutant', min: 0, max: 499 },
+  { name: 'Régulier', min: 500, max: 1999 },
+  { name: 'Athlète', min: 2000, max: 4999 },
+  { name: 'Machine', min: 5000, max: 9999 },
+  { name: 'Légende', min: 10000, max: Infinity },
+];
+
+function computeLevel(xp: number) {
+  const lvl = XP_LEVELS.find((l) => xp >= l.min && xp <= l.max) ?? XP_LEVELS[0];
+  const nextIdx = XP_LEVELS.indexOf(lvl) + 1;
+  const next = XP_LEVELS[nextIdx];
+  return { level: lvl.name, xpToNextLevel: next ? next.min : lvl.max };
+}
+
+const INITIAL_BADGES: Badge[] = [
+  { id: 'b1',  name: 'Premier pas',    icon: 'footsteps-outline',          description: 'Compléter sa première séance',            condition: '1 séance',            unlocked: true,  unlockedDate: '8 Sep 2024',  category: 'workout' },
+  { id: 'b2',  name: 'Semaine complète', icon: 'calendar-outline',         description: '5 séances en une semaine',                condition: '5 séances/semaine',   unlocked: true,  unlockedDate: '15 Sep 2024', category: 'workout' },
+  { id: 'b3',  name: 'Machine',        icon: 'flame-outline',              description: '4 semaines de streak consécutives',       condition: '4 sem. consécutives', unlocked: true,  unlockedDate: '6 Oct 2024',  category: 'workout' },
+  { id: 'b4',  name: 'Inarrêtable',   icon: 'infinite-outline',           description: '12 semaines de streak consécutives',      condition: '12 sem. consécutives',unlocked: true,  unlockedDate: '1 Déc 2024',  category: 'workout' },
+  { id: 'b5',  name: 'Centurion',      icon: 'trophy-outline',             description: '100 séances totales',                     condition: '100 séances',         unlocked: true,  unlockedDate: '15 Jun 2025', category: 'workout' },
+  { id: 'b6',  name: 'Tonnage',        icon: 'barbell-outline',            description: 'Soulever 100 000 kg au total',            condition: '100 000 kg',          unlocked: true,  unlockedDate: '20 Mar 2025', category: 'workout' },
+  { id: 'b7',  name: 'PR Hunter',      icon: 'medal-outline',              description: 'Battre 10 records personnels',            condition: '10 PRs battus',       unlocked: true,  unlockedDate: '10 Aoû 2025', category: 'workout' },
+  { id: 'b8',  name: 'Demi-année',     icon: 'star-outline',               description: '24 semaines de streak entraînement',     condition: '24 sem. consécutives',unlocked: true,  unlockedDate: '1 Mar 2026',  category: 'workout' },
+  { id: 'b9',  name: 'Hydraté',        icon: 'water-outline',              description: '7 jours consécutifs à atteindre l\'objectif eau', condition: '7 jours consécutifs', unlocked: false, category: 'water' },
+  { id: 'b10', name: 'Chameau',        icon: 'sunny-outline',              description: '30 jours de streak eau',                  condition: '30 jours consécutifs',unlocked: false, category: 'water' },
+  { id: 'b11', name: 'Macro Master',   icon: 'checkmark-circle-outline',   description: '7 jours consécutifs de tracking complet', condition: '7 jours de tracking', unlocked: false, category: 'general' },
+  { id: 'b12', name: 'Régulier',       icon: 'clipboard-outline',          description: '30 jours de tracking nutrition',          condition: '30 jours tracking',   unlocked: false, category: 'general' },
+];
+
+const INIT_XP = 4850;
+const { level: INIT_LEVEL, xpToNextLevel: INIT_NEXT } = computeLevel(INIT_XP);
+
+export const useGamificationStore = create<GamificationState>((set, get) => ({
+  workoutStreakWeeks: 24,
+  workoutStreakTarget: 5,
+  workoutsThisWeek: 4,
+  waterStreakDays: 3,
+  totalXp: INIT_XP,
+  level: INIT_LEVEL,
+  xpToNextLevel: INIT_NEXT,
+  badges: INITIAL_BADGES,
+
+  addXp: (amount) =>
+    set((state) => {
+      const xp = state.totalXp + amount;
+      const { level, xpToNextLevel } = computeLevel(xp);
+      return { totalXp: xp, level, xpToNextLevel };
+    }),
+
+  completeWaterGoal: () =>
+    set((state) => {
+      const xp = state.totalXp + 10;
+      const { level, xpToNextLevel } = computeLevel(xp);
+      return { waterStreakDays: state.waterStreakDays + 1, totalXp: xp, level, xpToNextLevel };
+    }),
+
+  completeWorkout: () =>
+    set((state) => {
+      const count = state.workoutsThisWeek + 1;
+      const xp = state.totalXp + 50;
+      const { level, xpToNextLevel } = computeLevel(xp);
+      const weeks = count >= state.workoutStreakTarget
+        ? state.workoutStreakWeeks + 1
+        : state.workoutStreakWeeks;
+      return { workoutsThisWeek: count, workoutStreakWeeks: weeks, totalXp: xp, level, xpToNextLevel };
+    }),
 }));

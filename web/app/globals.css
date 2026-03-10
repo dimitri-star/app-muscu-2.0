@@ -145,3 +145,11 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #1DB954;
 }
+
+/* Print styles for programme export */
+@media print {
+  nav, aside, header, .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+  * { color: black !important; background: white !important; border-color: #ccc !important; }
+  .print-page { break-inside: avoid; }
+}

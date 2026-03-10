@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -18,13 +19,13 @@ import { Ionicons } from '@expo/vector-icons';
 import Colors from '../../constants/colors';
 import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
-import { useWorkoutStore, useNutritionStore, useWaterStore } from '../../store';
+import { useWorkoutStore, useWaterStore, useProgramStore } from '../../store';
 import { recentWorkouts, weeklyProgram, exercisesDB } from '../../constants/mockData';
+import { PROGRAMME_API } from '../../constants/api';
 import type { WorkoutExercise, Exercise } from '../../constants/mockData';
 import StartWorkoutModal from '../../components/StartWorkoutModal';
 import ExerciseSearchModal from '../../components/ExerciseSearchModal';
 import SaveWorkoutModal from '../../components/SaveWorkoutModal';
-import CustomWaterModal from '../../components/CustomWaterModal';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,13 +56,31 @@ function resolveExercise(nameWithSets: string): Exercise {
   };
 }
 
+// Parse "4×5", "3×8-10", "2×3-4" → { numSets, reps }
+function parseProgramSets(setsStr: string): { numSets: number; reps: number } {
+  const m = setsStr.match(/(\d+)\s*[x×]\s*(\d+)/i);
+  if (!m) return { numSets: 3, reps: 8 };
+  return { numSets: parseInt(m[1], 10), reps: parseInt(m[2], 10) };
+}
+
+// Parse "3min", "2-3min", "90s", "120" → seconds
+function parseProgramRest(restStr: string): number {
+  if (!restStr) return 120;
+  const minRange = restStr.match(/(\d+)-(\d+)\s*min/i);
+  if (minRange) return Math.round((parseInt(minRange[1]) + parseInt(minRange[2])) / 2) * 60;
+  const min = restStr.match(/(\d+)\s*min/i);
+  if (min) return parseInt(min[1]) * 60;
+  const sec = restStr.match(/(\d+)\s*s/i);
+  if (sec) return parseInt(sec[1]);
+  return 120;
+}
+
 // ─── Sub-tab pill row ─────────────────────────────────────────────────────────
 
-type SeanceTab = 'seance' | 'chrono' | 'nutrition' | 'eau' | 'programme';
+type SeanceTab = 'seance' | 'chrono' | 'eau' | 'programme';
 const SEANCE_TABS: { key: SeanceTab; label: string }[] = [
   { key: 'seance', label: 'Seance' },
   { key: 'chrono', label: 'Chrono' },
-  { key: 'nutrition', label: 'Nutrition' },
   { key: 'eau', label: 'Eau' },
   { key: 'programme', label: 'Programme' },
 ];
@@ -124,26 +143,31 @@ function getSeanceStyles(colors: ThemeColors) {
     dotPending: { backgroundColor: colors.textTertiary },
     tableHeader: { flexDirection: 'row', paddingHorizontal: 14, paddingBottom: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
     colHead: { color: colors.textSecondary, fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
-    colNum: { width: 28, textAlign: 'center' },
+    colNum: { width: 24, textAlign: 'center' },
     colInput: { flex: 1, textAlign: 'center' },
-    colCheck: { width: 44 },
-    setRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8 },
+    colRpe: { width: 44, textAlign: 'center' },
+    colCheck: { width: 38 },
+    setRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 6 },
     setNum: { color: colors.textSecondary, fontSize: 13, textAlign: 'center' },
-    setInput: { color: colors.text, fontSize: 15, fontWeight: '600', backgroundColor: colors.input, borderRadius: 8, marginHorizontal: 4, paddingHorizontal: 8, paddingVertical: 6, textAlign: 'center' },
+    setInput: { color: colors.text, fontSize: 14, fontWeight: '600', backgroundColor: colors.input, borderRadius: 8, marginHorizontal: 3, paddingHorizontal: 6, paddingVertical: 5, textAlign: 'center' },
+    rpeInput: { color: colors.accent, fontSize: 13, fontWeight: '700', backgroundColor: colors.input, borderRadius: 8, marginHorizontal: 3, paddingHorizontal: 4, paddingVertical: 5, textAlign: 'center', width: 38 },
+    rpePlaceholder: { color: colors.textTertiary, fontSize: 11 },
     checkbox: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: colors.textTertiary, alignItems: 'center', justifyContent: 'center' },
     checkboxDone: { backgroundColor: colors.accent, borderColor: colors.accent },
+    notesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
+    notesInput: { flex: 1, color: colors.textSecondary, fontSize: 13, backgroundColor: colors.input, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, minHeight: 32 },
     addSetBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator, marginHorizontal: 14, marginBottom: 4 },
     addSetText: { color: colors.text, fontSize: 13, fontWeight: '500' },
   });
 }
 
 function ExerciseCard({ ex, styles: sc, colors }: { ex: WorkoutExercise; styles: ReturnType<typeof getSeanceStyles>; colors: ThemeColors }) {
-  const { toggleSetDone, updateSet, addSet } = useWorkoutStore();
+  const { toggleSetDone, updateSet, addSet, removeSet, updateNotes } = useWorkoutStore();
   const [expanded, setExpanded] = useState(true);
 
   return (
     <View style={sc.exCard}>
-      {/* Header - tappable to collapse */}
+      {/* Header */}
       <TouchableOpacity style={sc.exHeader} onPress={() => setExpanded((e) => !e)} activeOpacity={0.7}>
         <Text style={sc.exName}>{ex.exercise.name}</Text>
         <View style={sc.progressDots}>
@@ -155,25 +179,74 @@ function ExerciseCard({ ex, styles: sc, colors }: { ex: WorkoutExercise; styles:
       </TouchableOpacity>
       {expanded && (
         <>
+          {/* Column headers */}
           <View style={sc.tableHeader}>
             <Text style={[sc.colHead, sc.colNum]}>#</Text>
             <Text style={[sc.colHead, sc.colInput]}>Reps</Text>
-            <Text style={[sc.colHead, sc.colInput]}>Poids</Text>
-            <Text style={[sc.colHead, sc.colCheck]}>Fait</Text>
+            <Text style={[sc.colHead, sc.colInput]}>kg</Text>
+            <Text style={[sc.colHead, sc.colRpe]}>RPE</Text>
+            <Text style={[sc.colHead, sc.colCheck]}>✓</Text>
           </View>
+          {/* Set rows */}
           {ex.sets.map((s, i) => (
             <View key={s.id} style={sc.setRow}>
-              <Text style={[sc.setNum, sc.colNum]}>{i + 1}</Text>
-              <TextInput style={[sc.setInput, sc.colInput]} value={String(s.reps)} keyboardType="numeric" onChangeText={(v) => updateSet(ex.id, s.id, 'reps', parseInt(v) || 0)} placeholderTextColor={colors.textTertiary} />
-              <TextInput style={[sc.setInput, sc.colInput]} value={String(s.weight)} keyboardType="numeric" onChangeText={(v) => updateSet(ex.id, s.id, 'weight', parseFloat(v) || 0)} placeholderTextColor={colors.textTertiary} />
+              {ex.sets.length > 1 ? (
+                <TouchableOpacity style={[sc.colNum, { alignItems: 'center' }]} onPress={() => removeSet(ex.id, s.id)}>
+                  <Ionicons name="remove-circle" size={16} color={colors.error} />
+                </TouchableOpacity>
+              ) : (
+                <Text style={[sc.setNum, sc.colNum]}>{i + 1}</Text>
+              )}
+              <TextInput
+                style={[sc.setInput, sc.colInput]}
+                value={String(s.reps)}
+                keyboardType="numeric"
+                onChangeText={(v) => updateSet(ex.id, s.id, 'reps', parseInt(v) || 0)}
+                placeholderTextColor={colors.textTertiary}
+              />
+              <TextInput
+                style={[sc.setInput, sc.colInput]}
+                value={s.weight > 0 ? String(s.weight) : ''}
+                placeholder="0"
+                keyboardType="decimal-pad"
+                onChangeText={(v) => updateSet(ex.id, s.id, 'weight', parseFloat(v) || 0)}
+                placeholderTextColor={colors.textTertiary}
+              />
+              <TextInput
+                style={sc.rpeInput}
+                value={s.rpe ? String(s.rpe) : ''}
+                placeholder="—"
+                keyboardType="numeric"
+                maxLength={2}
+                onChangeText={(v) => {
+                  const n = parseInt(v);
+                  if (!isNaN(n) && n >= 1 && n <= 10) updateSet(ex.id, s.id, 'rpe', n);
+                  else if (v === '') updateSet(ex.id, s.id, 'rpe', 0);
+                }}
+                placeholderTextColor={colors.textTertiary}
+              />
               <TouchableOpacity style={[sc.colCheck, { alignItems: 'center' }]} onPress={() => toggleSetDone(ex.id, s.id)}>
-                <View style={[sc.checkbox, s.done && sc.checkboxDone]}>{s.done && <Ionicons name="checkmark" size={14} color={colors.background} />}</View>
+                <View style={[sc.checkbox, s.done && sc.checkboxDone]}>
+                  {s.done && <Ionicons name="checkmark" size={14} color={colors.background} />}
+                </View>
               </TouchableOpacity>
             </View>
           ))}
+          {/* Notes row */}
+          <View style={sc.notesRow}>
+            <Ionicons name="create-outline" size={14} color={colors.textTertiary} />
+            <TextInput
+              style={sc.notesInput}
+              value={ex.notes || ''}
+              onChangeText={(v) => updateNotes(ex.id, v)}
+              placeholder="Notes, sensations, tempo..."
+              placeholderTextColor={colors.textTertiary}
+              multiline
+            />
+          </View>
           <TouchableOpacity style={sc.addSetBtn} onPress={() => addSet(ex.id)}>
             <Ionicons name="add" size={16} color={colors.text} />
-            <Text style={sc.addSetText}>Ajouter une serie</Text>
+            <Text style={sc.addSetText}>Ajouter une série</Text>
           </TouchableOpacity>
         </>
       )}
@@ -324,16 +397,30 @@ function SeanceContent() {
     setShowDayPicker(true);
   };
 
+  const { program: webProgram } = useProgramStore();
+  const { addExerciseFromProgram } = useWorkoutStore();
+
   const handleSelectDay = (dayIndex: number) => {
-    const day = weeklyProgram[dayIndex];
     clearExercises();
     startWorkout();
-    // Add exercises from the program day
-    if (day.type !== 'rest') {
-      day.exercises.forEach((exStr) => {
-        const exercise = resolveExercise(exStr);
-        addExercise(exercise);
-      });
+
+    const webDay = webProgram?.days[dayIndex];
+    const localDay = weeklyProgram[dayIndex];
+    const isRest = webDay ? webDay.type === 'rest' : localDay.type === 'rest';
+
+    if (!isRest) {
+      if (webDay && webDay.exercises.length > 0) {
+        webDay.exercises.forEach((ex) => {
+          const exercise = resolveExercise(ex.name);
+          const { numSets, reps } = parseProgramSets(ex.sets);
+          const restTime = parseProgramRest(ex.rest);
+          addExerciseFromProgram(exercise, numSets, reps, restTime, `${ex.sets} — repos ${ex.rest}`);
+        });
+      } else {
+        localDay.exercises.forEach((exStr) => {
+          addExercise(resolveExercise(exStr));
+        });
+      }
     }
   };
 
@@ -369,7 +456,7 @@ function SeanceContent() {
           <Text style={activeStyles.sectionTitle}>Dernieres seances</Text>
           {recentWorkouts.map((w) => (
             <View key={w.id} style={activeStyles.historyCard}>
-              <Text style={activeStyles.historyDate}>{w.date}</Text>
+              <Text style={activeStyles.historyDate}>{new Date(w.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</Text>
               <Text style={activeStyles.historyName}>{w.name}</Text>
               <View style={activeStyles.historyMeta}>
                 <Text style={activeStyles.historyMetaText}>
@@ -575,6 +662,42 @@ function ChronoContent() {
   const [reposRunning, setReposRunning] = useState(false);
   const reposRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Tabata
+  const TABATA_WORK = 20;
+  const TABATA_REST = 10;
+  const [tabataRunning, setTabataRunning] = useState(false);
+  const [tabataIsWork, setTabataIsWork] = useState(true);
+  const [tabataRemaining, setTabataRemaining] = useState(TABATA_WORK);
+  const [tabataRounds, setTabataRounds] = useState(0);
+  const tabataRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tabataStateRef = useRef({ isWork: true, remaining: TABATA_WORK });
+
+  useEffect(() => {
+    if (tabataRunning) {
+      tabataRef.current = setInterval(() => {
+        tabataStateRef.current.remaining -= 1;
+        if (tabataStateRef.current.remaining <= 0) {
+          const nextIsWork = !tabataStateRef.current.isWork;
+          if (tabataStateRef.current.isWork) setTabataRounds((r) => r + 1);
+          tabataStateRef.current = { isWork: nextIsWork, remaining: nextIsWork ? TABATA_WORK : TABATA_REST };
+        }
+        setTabataIsWork(tabataStateRef.current.isWork);
+        setTabataRemaining(tabataStateRef.current.remaining);
+      }, 1000);
+    } else {
+      if (tabataRef.current) clearInterval(tabataRef.current);
+    }
+    return () => { if (tabataRef.current) clearInterval(tabataRef.current); };
+  }, [tabataRunning]);
+
+  const handleTabataReset = () => {
+    setTabataRunning(false);
+    setTabataIsWork(true);
+    setTabataRemaining(TABATA_WORK);
+    setTabataRounds(0);
+    tabataStateRef.current = { isWork: true, remaining: TABATA_WORK };
+  };
+
   useEffect(() => {
     if (timerRunning) {
       timerRef.current = setInterval(() => {
@@ -769,11 +892,22 @@ function ChronoContent() {
       {/* Tabata */}
       {mode === 'tabata' && (
         <View style={chronoStyles.watchContainer}>
-          <Text style={chronoStyles.bigTime}>00:20</Text>
-          <Text style={chronoStyles.reposHint}>Tabata: 20s effort / 10s repos</Text>
+          <Text style={[chronoStyles.reposHint, { marginBottom: 8 }]}>
+            {tabataIsWork ? 'EFFORT' : 'REPOS'} · Tour {tabataRounds + 1}
+          </Text>
+          <Text style={[chronoStyles.bigTime, { color: tabataIsWork ? colors.accent : colors.accentOrange }]}>
+            {formatTime(tabataRemaining)}
+          </Text>
+          <Text style={chronoStyles.reposHint}>Tabata: {TABATA_WORK}s effort / {TABATA_REST}s repos</Text>
           <View style={chronoStyles.btnRow}>
-            <TouchableOpacity style={[chronoStyles.mainBtn, chronoStyles.greenBtn]}>
-              <Text style={chronoStyles.mainBtnText}>Demarrer</Text>
+            <TouchableOpacity style={chronoStyles.grayBtn} onPress={handleTabataReset}>
+              <Text style={chronoStyles.grayBtnText}>Reinitialiser</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[chronoStyles.mainBtn, tabataRunning ? chronoStyles.orangeBtn : chronoStyles.greenBtn]}
+              onPress={() => setTabataRunning((r) => !r)}
+            >
+              <Text style={chronoStyles.mainBtnText}>{tabataRunning ? 'Pause' : 'Demarrer'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -782,144 +916,56 @@ function ChronoContent() {
   );
 }
 
-// ─── TAB: NUTRITION ───────────────────────────────────────────────────────────
-
-type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-const MEAL_LABELS: Record<MealType, string> = {
-  breakfast: 'Petit-dejeuner',
-  lunch: 'Dejeuner',
-  dinner: 'Diner',
-  snack: 'Collations',
-};
-
-function getNutStyles(colors: ThemeColors) {
-  return StyleSheet.create({
-    container: { padding: 16 },
-    summaryCard: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, gap: 10 },
-    summaryTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 4 },
-    macroRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    macroLabel: { color: colors.textSecondary, fontSize: 13, width: 80 },
-    barContainer: { flex: 1, height: 6, backgroundColor: colors.cardAlt, borderRadius: 3, overflow: 'hidden' },
-    barFill: { height: '100%', borderRadius: 3 },
-    macroValue: { color: colors.text, fontSize: 12, fontWeight: '600', width: 80, textAlign: 'right' },
-    mealSection: { backgroundColor: colors.card, borderRadius: 12, marginBottom: 10, overflow: 'hidden' },
-    mealHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 },
-    mealTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
-    mealHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    mealKcal: { color: colors.textSecondary, fontSize: 13 },
-    foodRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
-    foodName: { color: colors.text, fontSize: 14, fontWeight: '500' },
-    foodGrams: { color: colors.textSecondary, fontSize: 12, marginTop: 1 },
-    foodKcal: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
-    addFoodBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
-    addFoodText: { color: colors.textSecondary, fontSize: 13 },
-  });
-}
-
-function MacroBar({ label, current, goal, color, unit = 'g', styles: st }: { label: string; current: number; goal: number; color: string; unit?: string; styles: ReturnType<typeof getNutStyles> }) {
-  const pct = Math.min(current / goal, 1);
-  return (
-    <View style={st.macroRow}>
-      <Text style={st.macroLabel}>{label}</Text>
-      <View style={st.barContainer}>
-        <View style={[st.barFill, { width: `${pct * 100}%` as any, backgroundColor: color }]} />
-      </View>
-      <Text style={st.macroValue}>{Math.round(current)}/{goal}{unit}</Text>
-    </View>
-  );
-}
-
-function MealSection({ mealType, styles: st, colors }: { mealType: MealType; styles: ReturnType<typeof getNutStyles>; colors: ThemeColors }) {
-  const { meals, getMealTotals } = useNutritionStore();
-  const [expanded, setExpanded] = useState(true);
-  const items = meals.filter((m) => m.mealType === mealType);
-  const totals = getMealTotals(mealType);
-  return (
-    <View style={st.mealSection}>
-      <TouchableOpacity style={st.mealHeader} onPress={() => setExpanded((e) => !e)}>
-        <Text style={st.mealTitle}>{MEAL_LABELS[mealType]}</Text>
-        <View style={st.mealHeaderRight}>
-          <Text style={st.mealKcal}>{Math.round(totals.calories)} kcal</Text>
-          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
-        </View>
-      </TouchableOpacity>
-      {expanded && (
-        <View>
-          {items.map((m) => {
-            const ratio = m.foodItem.servingUnit === 'g' ? m.quantity / m.foodItem.servingSize : m.quantity;
-            const kcal = Math.round(m.foodItem.calories * ratio);
-            return (
-              <View key={m.id} style={st.foodRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={st.foodName}>{m.foodItem.name}</Text>
-                  <Text style={st.foodGrams}>{m.quantity}{m.foodItem.servingUnit}</Text>
-                </View>
-                <Text style={st.foodKcal}>{kcal} kcal</Text>
-              </View>
-            );
-          })}
-          <TouchableOpacity style={st.addFoodBtn}>
-            <Ionicons name="add" size={14} color={colors.textSecondary} />
-            <Text style={st.addFoodText}>Ajouter un aliment</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
-}
-
-function NutritionContent() {
-  const { getTotals, goals } = useNutritionStore();
-  const totals = getTotals();
-  const isDark = useThemeStore((s) => s.isDark);
-  const colors = getColors(isDark);
-  const nutStyles = useMemo(() => getNutStyles(colors), [isDark]);
-
-  return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={nutStyles.container}>
-      {/* Macro summary */}
-      <View style={nutStyles.summaryCard}>
-        <Text style={nutStyles.summaryTitle}>Macros du jour</Text>
-        <MacroBar label="Proteines" current={totals.protein} goal={goals.protein} color="#3B82F6" styles={nutStyles} />
-        <MacroBar label="Glucides" current={totals.carbs} goal={goals.carbs} color={colors.accentOrange} styles={nutStyles} />
-        <MacroBar label="Lipides" current={totals.fat} goal={goals.fat} color="#EF4444" styles={nutStyles} />
-        <MacroBar label="Calories" current={totals.calories} goal={goals.calories} color={colors.accent} unit=" kcal" styles={nutStyles} />
-      </View>
-      {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((mt) => (
-        <MealSection key={mt} mealType={mt} styles={nutStyles} colors={colors} />
-      ))}
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
-  );
-}
-
 // ─── TAB: EAU ─────────────────────────────────────────────────────────────────
 
-const WATER_GAUGE_SIZE = 200;
-const WATER_GAUGE_STROKE = 18;
-const WATER_RADIUS = (WATER_GAUGE_SIZE - WATER_GAUGE_STROKE) / 2;
-const WATER_CIRCUMFERENCE = 2 * Math.PI * WATER_RADIUS;
+const GAUGE_SIZE = 220;
+const GAUGE_STROKE = 20;
+const GAUGE_RADIUS = (GAUGE_SIZE - GAUGE_STROKE) / 2;
+const GAUGE_CIRCUMFERENCE = 2 * Math.PI * GAUGE_RADIUS;
+
+
+const DRINK_TYPES = [
+  { id: 'eau', label: 'Eau', icon: 'water-outline' as const },
+  { id: 'the', label: 'Thé', icon: 'leaf-outline' as const },
+  { id: 'cafe', label: 'Café', icon: 'cafe-outline' as const },
+  { id: 'lait', label: 'Lait', icon: 'beaker-outline' as const },
+  { id: 'jus', label: 'Jus', icon: 'nutrition-outline' as const },
+  { id: 'autres', label: 'Autres', icon: 'ellipsis-horizontal-circle-outline' as const },
+];
+
+const QUICK_AMOUNTS = [100, 250, 300, 500, 750, 1000];
 
 function getWaterStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { padding: 16, alignItems: 'center' },
-    gaugeWrapper: { width: WATER_GAUGE_SIZE, height: WATER_GAUGE_SIZE, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+    gaugeWrapper: { width: GAUGE_SIZE, height: GAUGE_SIZE, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
     gaugeInner: { position: 'absolute', alignItems: 'center' },
-    gaugeMain: { color: colors.text, fontSize: 32, fontWeight: '800' },
+    gaugeMain: { color: colors.text, fontSize: 36, fontWeight: '800' },
     gaugeGoal: { color: colors.textSecondary, fontSize: 14, marginTop: 2 },
     gaugePct: { color: colors.accent, fontSize: 16, fontWeight: '700', marginTop: 4 },
-    quickAddRow: { flexDirection: 'row', gap: 10, marginBottom: 16, width: '100%' },
-    quickBtn: { flex: 1, backgroundColor: colors.card, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+    drinkRow: { flexDirection: 'row', gap: 8, marginBottom: 16, width: '100%' },
+    drinkBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 12, backgroundColor: colors.card },
+    drinkBtnActive: { backgroundColor: colors.accentMuted, borderWidth: 1, borderColor: colors.accent },
+    drinkIcon: { marginBottom: 3 },
+    drinkLabel: { color: colors.textSecondary, fontSize: 10, fontWeight: '500' },
+    drinkLabelActive: { color: colors.accent, fontWeight: '700' },
+    quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16, width: '100%' },
+    quickBtn: { width: '31%', backgroundColor: colors.card, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
     quickBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    customRow: { flexDirection: 'row', gap: 8, marginBottom: 16, width: '100%' },
+    customInput: { flex: 1, backgroundColor: colors.card, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: colors.text, fontSize: 15 },
+    customBtn: { backgroundColor: colors.accent, borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12, justifyContent: 'center' },
+    customBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
     historyCard: { width: '100%', backgroundColor: colors.card, borderRadius: 12, marginBottom: 16, overflow: 'hidden' },
     historyTitle: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
     entryRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
-    entryTime: { color: colors.textSecondary, fontSize: 13, width: 50, fontVariant: ['tabular-nums'] },
+    entryTime: { color: colors.textSecondary, fontSize: 13, width: 50 },
     entryAmount: { color: colors.text, fontSize: 14, fontWeight: '600', flex: 1 },
     deleteBtn: { padding: 6 },
     chartCard: { width: '100%', backgroundColor: colors.card, borderRadius: 12, padding: 16 },
-    chartTitle: { color: colors.text, fontSize: 15, fontWeight: '600', marginBottom: 16 },
+    chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 },
+    chartTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
+    chartAvg: { color: colors.textSecondary, fontSize: 12 },
     chart: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 100 },
     barCol: { alignItems: 'center', flex: 1 },
     barTrack: { height: 80, width: 24, borderRadius: 6, backgroundColor: colors.cardAlt, justifyContent: 'flex-end', overflow: 'hidden', marginBottom: 6 },
@@ -933,58 +979,85 @@ function WaterContent() {
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const waterStyles = useMemo(() => getWaterStyles(colors), [isDark]);
+  const [selectedDrink, setSelectedDrink] = useState('eau');
+  const [customAmount, setCustomAmount] = useState('');
+
   const pct = Math.min(current / goal, 1);
-  const strokeDash = WATER_CIRCUMFERENCE * pct;
+  const strokeDash = GAUGE_CIRCUMFERENCE * pct;
+
   const maxBar = Math.max(...weekHistory.map((d) => d.amount), 1);
-  const [showWaterModal, setShowWaterModal] = useState(false);
+  const avgAmount = Math.round(weekHistory.reduce((s, d) => s + d.amount, 0) / weekHistory.length);
+
+  const handleCustomAdd = () => {
+    const ml = parseInt(customAmount, 10);
+    if (!isNaN(ml) && ml > 0) {
+      addWater(ml);
+      setCustomAmount('');
+    }
+  };
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={waterStyles.container}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={waterStyles.container} keyboardShouldPersistTaps="handled">
+      {/* Animated gauge */}
       <View style={waterStyles.gaugeWrapper}>
-        <Svg width={WATER_GAUGE_SIZE} height={WATER_GAUGE_SIZE}>
-          <Circle cx={WATER_GAUGE_SIZE / 2} cy={WATER_GAUGE_SIZE / 2} r={WATER_RADIUS} stroke={colors.card} strokeWidth={WATER_GAUGE_STROKE} fill="none" />
+        <Svg width={GAUGE_SIZE} height={GAUGE_SIZE}>
+          <Circle cx={GAUGE_SIZE / 2} cy={GAUGE_SIZE / 2} r={GAUGE_RADIUS} stroke={colors.card} strokeWidth={GAUGE_STROKE} fill="none" />
           <Circle
-            cx={WATER_GAUGE_SIZE / 2}
-            cy={WATER_GAUGE_SIZE / 2}
-            r={WATER_RADIUS}
+            cx={GAUGE_SIZE / 2}
+            cy={GAUGE_SIZE / 2}
+            r={GAUGE_RADIUS}
             stroke={colors.accent}
-            strokeWidth={WATER_GAUGE_STROKE}
+            strokeWidth={GAUGE_STROKE}
             fill="none"
-            strokeDasharray={`${strokeDash} ${WATER_CIRCUMFERENCE}`}
-            strokeDashoffset={0}
+            strokeDasharray={`${strokeDash} ${GAUGE_CIRCUMFERENCE}`}
             strokeLinecap="round"
             rotation="-90"
-            origin={`${WATER_GAUGE_SIZE / 2}, ${WATER_GAUGE_SIZE / 2}`}
+            origin={`${GAUGE_SIZE / 2}, ${GAUGE_SIZE / 2}`}
           />
         </Svg>
         <View style={waterStyles.gaugeInner}>
-          <Text style={waterStyles.gaugeMain}>
-            {(current / 1000).toFixed(1)}L
-          </Text>
+          <Text style={waterStyles.gaugeMain}>{(current / 1000).toFixed(1)}L</Text>
           <Text style={waterStyles.gaugeGoal}>/ {(goal / 1000).toFixed(0)}L</Text>
           <Text style={waterStyles.gaugePct}>{Math.round(pct * 100)}%</Text>
         </View>
       </View>
 
-      {/* Quick add buttons */}
-      <View style={waterStyles.quickAddRow}>
-        {[
-          { label: '+250 ml', amount: 250 },
-          { label: '+500 ml', amount: 500 },
-        ].map((btn) => (
-          <TouchableOpacity
-            key={btn.amount}
-            style={waterStyles.quickBtn}
-            onPress={() => addWater(btn.amount)}
-          >
-            <Text style={waterStyles.quickBtnText}>{btn.label}</Text>
+      {/* Drink type selector */}
+      <View style={waterStyles.drinkRow}>
+        {DRINK_TYPES.map((dt) => {
+          const active = selectedDrink === dt.id;
+          return (
+            <TouchableOpacity key={dt.id} style={[waterStyles.drinkBtn, active && waterStyles.drinkBtnActive]} onPress={() => setSelectedDrink(dt.id)} activeOpacity={0.7}>
+              <Ionicons name={dt.icon} size={18} color={active ? colors.accent : colors.textSecondary} style={waterStyles.drinkIcon} />
+              <Text style={[waterStyles.drinkLabel, active && waterStyles.drinkLabelActive]}>{dt.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* 6 quick-add buttons in 3×2 grid */}
+      <View style={waterStyles.quickGrid}>
+        {QUICK_AMOUNTS.map((a) => (
+          <TouchableOpacity key={a} style={waterStyles.quickBtn} onPress={() => addWater(a)} activeOpacity={0.8}>
+            <Text style={waterStyles.quickBtnText}>+{a} ml</Text>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity
-          style={waterStyles.quickBtn}
-          onPress={() => setShowWaterModal(true)}
-        >
-          <Text style={waterStyles.quickBtnText}>Autre</Text>
+      </View>
+
+      {/* Custom inline amount input */}
+      <View style={waterStyles.customRow}>
+        <TextInput
+          style={waterStyles.customInput}
+          placeholder="Quantité (ml)"
+          placeholderTextColor={colors.textTertiary}
+          keyboardType="number-pad"
+          value={customAmount}
+          onChangeText={setCustomAmount}
+          returnKeyType="done"
+          onSubmitEditing={handleCustomAdd}
+        />
+        <TouchableOpacity style={waterStyles.customBtn} onPress={handleCustomAdd} activeOpacity={0.85}>
+          <Text style={waterStyles.customBtnText}>Ajouter</Text>
         </TouchableOpacity>
       </View>
 
@@ -992,14 +1065,11 @@ function WaterContent() {
       {entries.length > 0 && (
         <View style={waterStyles.historyCard}>
           <Text style={waterStyles.historyTitle}>Historique du jour</Text>
-          {entries.map((entry) => (
+          {[...entries].reverse().map((entry) => (
             <View key={entry.id} style={waterStyles.entryRow}>
               <Text style={waterStyles.entryTime}>{entry.time}</Text>
               <Text style={waterStyles.entryAmount}>{entry.amount} ml</Text>
-              <TouchableOpacity
-                style={waterStyles.deleteBtn}
-                onPress={() => removeEntry(entry.id)}
-              >
+              <TouchableOpacity style={waterStyles.deleteBtn} onPress={() => removeEntry(entry.id)}>
                 <Ionicons name="close" size={16} color="#FF3B30" />
               </TouchableOpacity>
             </View>
@@ -1009,7 +1079,10 @@ function WaterContent() {
 
       {/* 7-day bar chart */}
       <View style={waterStyles.chartCard}>
-        <Text style={waterStyles.chartTitle}>7 derniers jours</Text>
+        <View style={waterStyles.chartHeader}>
+          <Text style={waterStyles.chartTitle}>7 derniers jours</Text>
+          <Text style={waterStyles.chartAvg}>Moy. {(avgAmount / 1000).toFixed(1)}L</Text>
+        </View>
         <View style={waterStyles.chart}>
           {weekHistory.map((d) => {
             const h = (d.amount / maxBar) * 80;
@@ -1017,12 +1090,7 @@ function WaterContent() {
             return (
               <View key={d.day} style={waterStyles.barCol}>
                 <View style={waterStyles.barTrack}>
-                  <View
-                    style={[
-                      waterStyles.barFill,
-                      { height: h, backgroundColor: isGoal ? colors.accent : colors.cardAlt },
-                    ]}
-                  />
+                  <View style={[waterStyles.barFill, { height: h, backgroundColor: isGoal ? colors.accent : colors.info }]} />
                 </View>
                 <Text style={waterStyles.barDay}>{d.day}</Text>
               </View>
@@ -1030,15 +1098,6 @@ function WaterContent() {
           })}
         </View>
       </View>
-
-      <CustomWaterModal
-        visible={showWaterModal}
-        onClose={() => setShowWaterModal(false)}
-        onAdd={(ml) => {
-          addWater(ml);
-          setShowWaterModal(false);
-        }}
-      />
     </ScrollView>
   );
 }
@@ -1051,6 +1110,10 @@ const todayProgramIndex = TODAY_INDEX === 0 ? 6 : TODAY_INDEX - 1;
 function getProgStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { padding: 16 },
+    syncRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 12 },
+    syncStatus: { flex: 1, color: colors.textSecondary, fontSize: 12 },
+    syncBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.accentMuted, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
+    syncBtnText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
     headerCard: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.accent },
     programName: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 4 },
     programMeta: { color: colors.textSecondary, fontSize: 13 },
@@ -1069,17 +1132,64 @@ function getProgStyles(colors: ThemeColors) {
   });
 }
 
-function ProgrammeContent() {
+function ProgrammeContent({ onLaunch }: { onLaunch: () => void }) {
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const progStyles = useMemo(() => getProgStyles(colors), [isDark]);
+  const { startWorkout, addExercise, clearExercises, addExerciseFromProgram } = useWorkoutStore();
+  const { program: webProgram, fetchProgram, isLoading, lastSynced } = useProgramStore();
+
+  const handleLaunchToday = () => {
+    clearExercises();
+    startWorkout();
+
+    const webDay = webProgram?.days[todayProgramIndex];
+    const localDay = weeklyProgram[todayProgramIndex];
+    const isRest = webDay ? webDay.type === 'rest' : localDay.type === 'rest';
+
+    if (!isRest) {
+      if (webDay && webDay.exercises.length > 0) {
+        webDay.exercises.forEach((ex) => {
+          const exercise = resolveExercise(ex.name);
+          const { numSets, reps } = parseProgramSets(ex.sets);
+          const restTime = parseProgramRest(ex.rest);
+          addExerciseFromProgram(exercise, numSets, reps, restTime, `${ex.sets} — repos ${ex.rest}`);
+        });
+      } else {
+        localDay.exercises.forEach((exStr) => {
+          addExercise(resolveExercise(exStr));
+        });
+      }
+    }
+    onLaunch();
+  };
+
+  // Decide which day list to display
+  const displayDays = webProgram?.days ?? weeklyProgram;
+  const programTitle = webProgram ? webProgram.name : 'Bloc Force — S5 Réalisation';
+  const programMeta = webProgram
+    ? `${webProgram.frequency} · Semaine ${webProgram.currentWeek}/${webProgram.weeks}`
+    : '8 fév → 21 mars 2026 · Semaine 5/6';
+
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={progStyles.container}>
-      <View style={progStyles.headerCard}>
-        <Text style={progStyles.programName}>PPL — 3 jours/semaine</Text>
-        <Text style={progStyles.programMeta}>6 jours · Push / Pull / Legs</Text>
+      {/* Sync row */}
+      <View style={progStyles.syncRow}>
+        <Ionicons name={webProgram ? 'cloud-done-outline' : 'cloud-offline-outline'} size={18} color={webProgram ? colors.accent : colors.textTertiary} />
+        <Text style={progStyles.syncStatus}>
+          {isLoading ? 'Synchronisation...' : webProgram ? `Synchronisé ${lastSynced ? `à ${lastSynced}` : ''}` : 'Programme local (non synchronisé)'}
+        </Text>
+        <TouchableOpacity style={progStyles.syncBtn} onPress={() => fetchProgram(PROGRAMME_API)} disabled={isLoading}>
+          <Ionicons name="sync-outline" size={14} color={colors.accent} />
+          <Text style={progStyles.syncBtnText}>Sync</Text>
+        </TouchableOpacity>
       </View>
-      {weeklyProgram.map((day, i) => {
+
+      <View style={progStyles.headerCard}>
+        <Text style={progStyles.programName}>{programTitle}</Text>
+        <Text style={progStyles.programMeta}>{programMeta}</Text>
+      </View>
+      {displayDays.map((day, i) => {
         const isToday = i === todayProgramIndex;
         const isRest = day.type === 'rest';
         return (
@@ -1090,7 +1200,7 @@ function ProgrammeContent() {
             </View>
             <View style={progStyles.dayCenter}>
               <Text style={progStyles.dayLabel}>{day.label}</Text>
-              <Text style={progStyles.dayExCount}>{isRest ? 'Journee de recuperation' : `${day.exercises.length} exercices`}</Text>
+              <Text style={progStyles.dayExCount}>{isRest ? 'Journée de récupération' : `${day.exercises.length} exercice${day.exercises.length > 1 ? 's' : ''}`}</Text>
             </View>
             {isRest ? (
               <View style={progStyles.reposBadge}>
@@ -1102,7 +1212,7 @@ function ProgrammeContent() {
           </View>
         );
       })}
-      <TouchableOpacity style={progStyles.launchBtn}>
+      <TouchableOpacity style={progStyles.launchBtn} onPress={handleLaunchToday}>
         <Text style={progStyles.launchBtnText}>Lancer la seance du jour</Text>
       </TouchableOpacity>
       <View style={{ height: 40 }} />
@@ -1114,6 +1224,11 @@ function ProgrammeContent() {
 
 export default function SeanceScreen() {
   const [activeTab, setActiveTab] = useState<SeanceTab>('seance');
+  useFocusEffect(
+    useCallback(() => {
+      setActiveTab('seance');
+    }, [])
+  );
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const styles = useMemo(
@@ -1132,9 +1247,8 @@ export default function SeanceScreen() {
       <View style={styles.content}>
         {activeTab === 'seance' && <SeanceContent />}
         {activeTab === 'chrono' && <ChronoContent />}
-        {activeTab === 'nutrition' && <NutritionContent />}
         {activeTab === 'eau' && <WaterContent />}
-        {activeTab === 'programme' && <ProgrammeContent />}
+        {activeTab === 'programme' && <ProgrammeContent onLaunch={() => setActiveTab('seance')} />}
       </View>
     </SafeAreaView>
   );

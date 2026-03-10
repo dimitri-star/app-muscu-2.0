@@ -25,13 +25,13 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const colors = getColors(isDark);
 
   // Profil fields
-  const [nom, setNom] = useState('Alex Dupont');
-  const [age, setAge] = useState('28');
-  const [taille, setTaille] = useState('180');
-  const [poids, setPoids] = useState('82');
+  const [nom, setNom] = useState('Dimitri Alvarez');
+  const [age, setAge] = useState('21');
+  const [taille, setTaille] = useState('178');
+  const [poids, setPoids] = useState('78');
 
   // Objectif
-  const [objectif, setObjectif] = useState<ObjectifOption>('Prise de masse');
+  const [objectif, setObjectif] = useState<ObjectifOption>('Force');
   const [showObjectifPicker, setShowObjectifPicker] = useState(false);
 
   // Macros
@@ -41,7 +41,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [calories, setCalories] = useState('2500');
 
   // Eau
-  const [eauObjectif, setEauObjectif] = useState('3000');
+  const [eauObjectif, setEauObjectif] = useState('3100');
 
   // Repos
   const [reposDefault, setReposDefault] = useState('90');

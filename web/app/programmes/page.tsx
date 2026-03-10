@@ -9,9 +9,11 @@ import {
   Archive,
   Calendar,
   CheckCircle2,
+  Download,
   Dumbbell,
   Pencil,
   Plus,
+  Printer,
   Save,
   Trash2,
   X,
@@ -229,6 +231,19 @@ export default function ProgrammesPage() {
       setIsSaving(false);
     }
   };
+
+  const handleExportJSON = () => {
+    if (!program) return;
+    const blob = new Blob([JSON.stringify(program, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `programme-${program.name.replace(/\s+/g, "-").toLowerCase()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrint = () => window.print();
 
   const cancelEdit = () => {
     // Re-fetch to discard changes
@@ -554,12 +569,32 @@ export default function ProgrammesPage() {
                 </p>
               </div>
             </div>
-            <div
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
-              style={{ backgroundColor: "rgba(29,185,84,0.1)", color: ACCENT }}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-              API active
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportJSON}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                style={{ backgroundColor: "#2A2A3E", color: "#CCC" }}
+                title="Télécharger le programme en JSON"
+              >
+                <Download className="w-3.5 h-3.5" />
+                JSON
+              </button>
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                style={{ backgroundColor: "#2A2A3E", color: "#CCC" }}
+                title="Imprimer / Exporter en PDF"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                PDF
+              </button>
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+                style={{ backgroundColor: "rgba(29,185,84,0.1)", color: ACCENT }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+                API active
+              </div>
             </div>
           </div>
         </CardContent>

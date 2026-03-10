@@ -12,37 +12,35 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
-import { recentWorkouts } from '../../constants/mockData';
+import { recentWorkouts, personalRecords, userProfile, MARCH_2026_WORKOUT_DAYS } from '../../constants/mockData';
 import SettingsScreen from '../../components/SettingsScreen';
+import { useGamificationStore } from '../../store';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ProfilTab = 'historique' | 'stats' | 'pr' | 'programmes' | 'calendrier';
+type ProfilTab = 'historique' | 'stats' | 'pr' | 'programmes' | 'calendrier' | 'badges';
 
 const PROFIL_TABS: { key: ProfilTab; label: string }[] = [
   { key: 'historique', label: 'Historique' },
   { key: 'stats', label: 'Stats' },
   { key: 'pr', label: 'PR' },
+  { key: 'badges', label: 'Badges' },
   { key: 'programmes', label: 'Programmes' },
   { key: 'calendrier', label: 'Calendrier' },
 ];
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
-const PERSONAL_RECORDS = [
-  { id: 'pr1', exercise: 'Développé couché', weight: 100, reps: 1, date: '15 Jan 2025' },
-  { id: 'pr2', exercise: 'Squat barre', weight: 130, reps: 1, date: '22 Fév 2025' },
-  { id: 'pr3', exercise: 'Soulevé de terre', weight: 160, reps: 1, date: '8 Mar 2025' },
-  { id: 'pr4', exercise: 'Curl biceps', weight: 40, reps: 8, date: '1 Mar 2025' },
-];
+// Real PRs from mockData (via import)
+const PERSONAL_RECORDS = personalRecords;
 
 const PROGRAMS = [
-  { id: 'p1', name: 'PPL — Push Pull Legs', duration: '6 jours/sem', split: 'Push / Pull / Legs', active: true },
-  { id: 'p2', name: 'Upper/Lower Split', duration: '4 jours/sem', split: 'Upper / Lower', active: false },
-  { id: 'p3', name: 'Full Body 3x', duration: '3 jours/sem', split: 'Full Body', active: false },
+  { id: 'p1', name: 'Bloc Force 6 semaines', duration: '6 jours/sem', split: '8 fév → 21 mars 2026 · S5 Réalisation', active: true },
+  { id: 'p2', name: 'PPL — Push Pull Legs', duration: '6 jours/sem', split: 'Push / Pull / Legs', active: false },
+  { id: 'p3', name: 'Upper/Lower Split', duration: '4 jours/sem', split: 'Upper / Lower', active: false },
 ];
 
-const WORKOUT_DAYS = [3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 26];
+const WORKOUT_DAYS = MARCH_2026_WORKOUT_DAYS;
 
 type StatPeriod = 'semaine' | 'mois' | 'annee' | 'tout';
 const STAT_PERIODS: { key: StatPeriod; label: string }[] = [
@@ -104,11 +102,17 @@ function getHeaderStyles(colors: ThemeColors) {
     name: { color: colors.text, fontSize: 20, fontWeight: '700', marginBottom: 2 },
     handle: { color: colors.textSecondary, fontSize: 14, marginBottom: 4 },
     bio: { color: colors.textSecondary, fontSize: 14 },
-    statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, backgroundColor: colors.card, borderRadius: 12, paddingVertical: 12 },
-    statItem: { flex: 1, alignItems: 'center' },
-    statValue: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 2 },
-    statLabel: { color: colors.textSecondary, fontSize: 12 },
-    statDivider: { width: StyleSheet.hairlineWidth, height: 30, backgroundColor: colors.separator },
+    // XP bar
+    xpRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+    xpLevel: { color: colors.text, fontSize: 13, fontWeight: '700' },
+    xpPoints: { color: colors.textSecondary, fontSize: 12 },
+    xpTrack: { height: 8, backgroundColor: colors.cardAlt, borderRadius: 4, overflow: 'hidden', marginBottom: 14 },
+    xpFill: { height: 8, borderRadius: 4, backgroundColor: colors.accent },
+    // Streak mini-cards
+    streakRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+    streakCard: { flex: 1, backgroundColor: colors.card, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+    streakVal: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 1 },
+    streakLbl: { color: colors.textSecondary, fontSize: 11 },
     editBtn: { borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
     editBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
   });
@@ -118,30 +122,40 @@ function ProfileHeader() {
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const headerStyles = useMemo(() => getHeaderStyles(colors), [isDark]);
+  const { workoutStreakWeeks, waterStreakDays, totalXp, xpToNextLevel, level } = useGamificationStore();
+  const xpPct = Math.min(totalXp / xpToNextLevel, 1);
+
   return (
     <View style={headerStyles.container}>
       <View style={headerStyles.avatarRow}>
         <View style={headerStyles.avatar} />
         <View style={headerStyles.userInfo}>
-          <Text style={headerStyles.name}>Alex Dupont</Text>
-          <Text style={headerStyles.handle}>@alexdupont</Text>
-          <Text style={headerStyles.bio}>Powerlifter | 3 ans de pratique</Text>
+          <Text style={headerStyles.name}>{userProfile.name}</Text>
+          <Text style={headerStyles.handle}>@{userProfile.username}</Text>
+          <Text style={headerStyles.bio}>{userProfile.bio}</Text>
         </View>
       </View>
-      <View style={headerStyles.statsRow}>
-        <View style={headerStyles.statItem}>
-          <Text style={headerStyles.statValue}>24</Text>
-          <Text style={headerStyles.statLabel}>séances</Text>
+      {/* XP bar */}
+      <View style={headerStyles.xpRow}>
+        <Text style={headerStyles.xpLevel}>{level}</Text>
+        <Text style={headerStyles.xpPoints}>{totalXp} / {xpToNextLevel} XP</Text>
+      </View>
+      <View style={headerStyles.xpTrack}>
+        <View style={[headerStyles.xpFill, { width: `${Math.round(xpPct * 100)}%` as any }]} />
+      </View>
+      {/* Streak mini-cards */}
+      <View style={headerStyles.streakRow}>
+        <View style={headerStyles.streakCard}>
+          <Text style={headerStyles.streakVal}>{workoutStreakWeeks}</Text>
+          <Text style={headerStyles.streakLbl}>sem. streak</Text>
         </View>
-        <View style={headerStyles.statDivider} />
-        <View style={headerStyles.statItem}>
-          <Text style={headerStyles.statValue}>142</Text>
-          <Text style={headerStyles.statLabel}>followers</Text>
+        <View style={headerStyles.streakCard}>
+          <Text style={headerStyles.streakVal}>{waterStreakDays}</Text>
+          <Text style={headerStyles.streakLbl}>jours eau</Text>
         </View>
-        <View style={headerStyles.statDivider} />
-        <View style={headerStyles.statItem}>
-          <Text style={headerStyles.statValue}>90</Text>
-          <Text style={headerStyles.statLabel}>following</Text>
+        <View style={headerStyles.streakCard}>
+          <Text style={headerStyles.streakVal}>{userProfile.totalWorkouts}</Text>
+          <Text style={headerStyles.streakLbl}>séances</Text>
         </View>
       </View>
       <TouchableOpacity style={headerStyles.editBtn}>
@@ -182,7 +196,9 @@ function HistoriqueContent() {
       {recentWorkouts.map((w) => (
         <TouchableOpacity key={w.id} style={tabStyles.historyCard}>
           <View style={tabStyles.historyLeft}>
-            <Text style={tabStyles.historyDate}>{w.date}</Text>
+            <Text style={tabStyles.historyDate}>
+              {new Date(w.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </Text>
             <Text style={tabStyles.historyName}>{w.name}</Text>
           </View>
           <View style={tabStyles.historyRight}>
@@ -237,18 +253,18 @@ function StatsContent() {
   const statsStyles = useMemo(() => getStatsStyles(colors), [isDark]);
 
   const STAT_CARDS = [
-    { label: 'Total séances', value: '24', sub: 'séances' },
-    { label: 'Volume total', value: '182 340', sub: 'kg' },
-    { label: 'Séries totales', value: '312', sub: 'séries' },
-    { label: 'Durée moy.', value: '58', sub: 'min' },
+    { label: 'Total séances', value: '156', sub: 'séances' },
+    { label: 'Volume 7j', value: '47 k', sub: 'kg' },
+    { label: 'Durée moy.', value: '73', sub: 'min' },
+    { label: 'Séances / sem.', value: '4-5', sub: 'cette semaine' },
   ];
   const WEEKLY = [
-    { day: 'L', val: 65 },
-    { day: 'M', val: 0 },
-    { day: 'M', val: 80 },
-    { day: 'J', val: 0 },
-    { day: 'V', val: 90 },
-    { day: 'S', val: 70 },
+    { day: 'L', val: 78 },
+    { day: 'M', val: 62 },
+    { day: 'M', val: 68 },
+    { day: 'J', val: 85 },
+    { day: 'V', val: 0 },
+    { day: 'S', val: 72 },
     { day: 'D', val: 0 },
   ];
   const maxVal = Math.max(...WEEKLY.map((d) => d.val), 1);
@@ -432,14 +448,34 @@ function getCalStyles(colors: ThemeColors) {
   });
 }
 
+const MONTH_NAMES = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+];
+
 function CalendrierContent() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth()); // 0-based
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const tabStyles = useMemo(() => getTabStyles(colors), [isDark]);
   const calStyles = useMemo(() => getCalStyles(colors), [isDark]);
-  const monthName = 'Mars 2025';
-  const firstDayOffset = 5;
-  const daysInMonth = 31;
+
+  const goBack = () => {
+    if (month === 0) { setMonth(11); setYear((y) => y - 1); }
+    else setMonth((m) => m - 1);
+  };
+  const goForward = () => {
+    if (month === 11) { setMonth(0); setYear((y) => y + 1); }
+    else setMonth((m) => m + 1);
+  };
+
+  const monthName = `${MONTH_NAMES[month]} ${year}`;
+  const firstDayOfMonth = new Date(year, month, 1).getDay();
+  // JS: 0=Sun, convert to Mon-first offset
+  const firstDayOffset = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells: (number | null)[] = [
     ...Array(firstDayOffset).fill(null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
@@ -452,11 +488,11 @@ function CalendrierContent() {
   return (
     <ScrollView contentContainerStyle={tabStyles.container}>
       <View style={calStyles.header}>
-        <TouchableOpacity style={calStyles.navBtn}>
+        <TouchableOpacity style={calStyles.navBtn} onPress={goBack}>
           <Ionicons name="chevron-back" size={18} color={colors.text} />
         </TouchableOpacity>
         <Text style={calStyles.monthTitle}>{monthName}</Text>
-        <TouchableOpacity style={calStyles.navBtn}>
+        <TouchableOpacity style={calStyles.navBtn} onPress={goForward}>
           <Ionicons name="chevron-forward" size={18} color={colors.text} />
         </TouchableOpacity>
       </View>
@@ -491,6 +527,102 @@ function CalendrierContent() {
           <Text style={calStyles.legendText}>Repos</Text>
         </View>
       </View>
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+}
+
+// ─── Tab: BADGES ──────────────────────────────────────────────────────────────
+
+function getBadgeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { padding: 16 },
+    sectionTitle: { color: colors.textSecondary, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginTop: 8 },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    badgeCard: { width: '47.5%', backgroundColor: colors.card, borderRadius: 14, padding: 14, alignItems: 'center' },
+    badgeCardLocked: { opacity: 0.4 },
+    badgeIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+    badgeName: { color: colors.text, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 3 },
+    badgeDesc: { color: colors.textSecondary, fontSize: 11, textAlign: 'center', marginBottom: 4 },
+    badgeDate: { color: colors.accent, fontSize: 11, fontWeight: '600' },
+    badgeLocked: { color: colors.textTertiary, fontSize: 11 },
+  });
+}
+
+function BadgesContent() {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const badgeStyles = useMemo(() => getBadgeStyles(colors), [isDark]);
+  const { badges } = useGamificationStore();
+
+  const workoutBadges = badges.filter((b) => b.category === 'workout');
+  const waterBadges = badges.filter((b) => b.category === 'water');
+  const generalBadges = badges.filter((b) => b.category === 'general');
+  const unlockedCount = badges.filter((b) => b.unlocked).length;
+
+  return (
+    <ScrollView contentContainerStyle={badgeStyles.container}>
+      <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 16 }}>
+        {unlockedCount}/{badges.length} badges débloqués
+      </Text>
+
+      <Text style={badgeStyles.sectionTitle}>Entraînement</Text>
+      <View style={badgeStyles.grid}>
+        {workoutBadges.map((badge) => (
+          <View key={badge.id} style={[badgeStyles.badgeCard, !badge.unlocked && badgeStyles.badgeCardLocked]}>
+            <View style={[badgeStyles.badgeIcon, { backgroundColor: badge.unlocked ? colors.accentMuted : colors.cardAlt }]}>
+              <Ionicons name={badge.icon as any} size={24} color={badge.unlocked ? colors.accent : colors.textTertiary} />
+            </View>
+            <Text style={badgeStyles.badgeName}>{badge.name}</Text>
+            <Text style={badgeStyles.badgeDesc}>{badge.description}</Text>
+            {badge.unlocked ? (
+              <Text style={badgeStyles.badgeDate}>{badge.unlockedDate}</Text>
+            ) : (
+              <Text style={badgeStyles.badgeLocked}>{badge.condition}</Text>
+            )}
+          </View>
+        ))}
+      </View>
+
+      <Text style={[badgeStyles.sectionTitle, { marginTop: 20 }]}>Hydratation</Text>
+      <View style={badgeStyles.grid}>
+        {waterBadges.map((badge) => (
+          <View key={badge.id} style={[badgeStyles.badgeCard, !badge.unlocked && badgeStyles.badgeCardLocked]}>
+            <View style={[badgeStyles.badgeIcon, { backgroundColor: badge.unlocked ? colors.accentMuted : colors.cardAlt }]}>
+              <Ionicons name={badge.icon as any} size={24} color={badge.unlocked ? colors.accent : colors.textTertiary} />
+            </View>
+            <Text style={badgeStyles.badgeName}>{badge.name}</Text>
+            <Text style={badgeStyles.badgeDesc}>{badge.description}</Text>
+            {badge.unlocked ? (
+              <Text style={badgeStyles.badgeDate}>{badge.unlockedDate}</Text>
+            ) : (
+              <Text style={badgeStyles.badgeLocked}>{badge.condition}</Text>
+            )}
+          </View>
+        ))}
+      </View>
+
+      {generalBadges.length > 0 && (
+        <>
+          <Text style={[badgeStyles.sectionTitle, { marginTop: 20 }]}>Général</Text>
+          <View style={badgeStyles.grid}>
+            {generalBadges.map((badge) => (
+              <View key={badge.id} style={[badgeStyles.badgeCard, !badge.unlocked && badgeStyles.badgeCardLocked]}>
+                <View style={[badgeStyles.badgeIcon, { backgroundColor: badge.unlocked ? colors.accentMuted : colors.cardAlt }]}>
+                  <Ionicons name={badge.icon as any} size={24} color={badge.unlocked ? colors.accent : colors.textTertiary} />
+                </View>
+                <Text style={badgeStyles.badgeName}>{badge.name}</Text>
+                <Text style={badgeStyles.badgeDesc}>{badge.description}</Text>
+                {badge.unlocked ? (
+                  <Text style={badgeStyles.badgeDate}>{badge.unlockedDate}</Text>
+                ) : (
+                  <Text style={badgeStyles.badgeLocked}>{badge.condition}</Text>
+                )}
+              </View>
+            ))}
+          </View>
+        </>
+      )}
       <View style={{ height: 40 }} />
     </ScrollView>
   );
@@ -542,6 +674,7 @@ export default function ProfilScreen() {
           {activeTab === 'historique' && <HistoriqueContent />}
           {activeTab === 'stats' && <StatsContent />}
           {activeTab === 'pr' && <PRContent />}
+          {activeTab === 'badges' && <BadgesContent />}
           {activeTab === 'programmes' && <ProgrammesContent />}
           {activeTab === 'calendrier' && <CalendrierContent />}
         </View>
