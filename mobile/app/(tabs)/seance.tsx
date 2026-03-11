@@ -307,7 +307,7 @@ function getActiveStyles(colors: ThemeColors) {
   return StyleSheet.create({
     idleContainer: { padding: 16 },
     idleTitle: { color: colors.text, fontSize: 26, fontWeight: '700', marginBottom: 16 },
-    ctaBtn: { backgroundColor: colors.cta, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 28 },
+    ctaBtn: { backgroundColor: colors.cta, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 28, borderWidth: 2, borderColor: colors.ctaText },
     ctaBtnText: { color: colors.ctaText, fontSize: 16, fontWeight: '700' },
     sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 12 },
     historyCard: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10 },

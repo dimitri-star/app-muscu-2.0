@@ -51,6 +51,23 @@ function getStyles(colors: ThemeColors) {
     },
     appName: { color: colors.text, fontSize: 22, fontWeight: '800' },
     dateText: { color: colors.textSecondary, fontSize: 13 },
+    streakBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: 'rgba(255, 107, 53, 0.12)',
+      borderRadius: 20,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    streakBadgeText: {
+      color: '#FF6B35',
+      fontSize: 15,
+      fontWeight: '800',
+    },
+    streakFlame: {
+      fontSize: 18,
+    },
     scroll: { flex: 1 },
     content: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 32 },
     sectionTitle: {
@@ -361,6 +378,7 @@ export default function DashboardScreen() {
   const colors = getColors(isDark);
   const s = useMemo(() => getStyles(colors), [isDark]);
   const router = useRouter();
+  const workoutStreakDays = useGamificationStore((s) => s.workoutStreakDays);
 
   const goToSeance = () => router.push('/(tabs)/seance' as any);
 
@@ -372,7 +390,10 @@ export default function DashboardScreen() {
       />
       <View style={s.header}>
         <Text style={s.appName}>FitTrack Pro</Text>
-        <Text style={s.dateText}>{formatDate()}</Text>
+        <View style={s.streakBadge}>
+          <Text style={s.streakFlame}>🔥</Text>
+          <Text style={s.streakBadgeText}>{workoutStreakDays}</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -380,9 +401,6 @@ export default function DashboardScreen() {
         contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={s.sectionTitle}>Performances</Text>
-        <StreakBanner s={s} colors={colors} />
-
         <Text style={s.sectionTitle}>Séance</Text>
         <ActiveWorkoutCard s={s} colors={colors} onPress={goToSeance} />
 

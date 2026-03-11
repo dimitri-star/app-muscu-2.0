@@ -158,7 +158,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       restTimerActive: false,
       restTimerSeconds: 90,
       restTimerTotal: 90,
-      savedWorkouts: [...recentWorkouts],
+      savedWorkouts: [],
 
       startWorkout: () => set({ isActive: true, timerSeconds: 0 }),
       endWorkout: () => set({ isActive: false }),
@@ -447,6 +447,8 @@ interface GamificationState {
   workoutStreakWeeks: number;
   workoutStreakTarget: number;
   workoutsThisWeek: number;
+  workoutStreakDays: number;
+  lastWorkoutDate: string | null;
   waterStreakDays: number;
   totalXp: number;
   level: string;
@@ -473,29 +475,30 @@ function computeLevel(xp: number) {
 }
 
 const INITIAL_BADGES: Badge[] = [
-  { id: 'b1',  name: 'Premier pas',    icon: 'footsteps-outline',          description: 'Compléter sa première séance',            condition: '1 séance',            unlocked: true,  unlockedDate: '8 Sep 2024',  category: 'workout' },
-  { id: 'b2',  name: 'Semaine complète', icon: 'calendar-outline',         description: '5 séances en une semaine',                condition: '5 séances/semaine',   unlocked: true,  unlockedDate: '15 Sep 2024', category: 'workout' },
-  { id: 'b3',  name: 'Machine',        icon: 'flame-outline',              description: '4 semaines de streak consécutives',       condition: '4 sem. consécutives', unlocked: true,  unlockedDate: '6 Oct 2024',  category: 'workout' },
-  { id: 'b4',  name: 'Inarrêtable',   icon: 'infinite-outline',           description: '12 semaines de streak consécutives',      condition: '12 sem. consécutives',unlocked: true,  unlockedDate: '1 Déc 2024',  category: 'workout' },
-  { id: 'b5',  name: 'Centurion',      icon: 'trophy-outline',             description: '100 séances totales',                     condition: '100 séances',         unlocked: true,  unlockedDate: '15 Jun 2025', category: 'workout' },
-  { id: 'b6',  name: 'Tonnage',        icon: 'barbell-outline',            description: 'Soulever 100 000 kg au total',            condition: '100 000 kg',          unlocked: true,  unlockedDate: '20 Mar 2025', category: 'workout' },
-  { id: 'b7',  name: 'PR Hunter',      icon: 'medal-outline',              description: 'Battre 10 records personnels',            condition: '10 PRs battus',       unlocked: true,  unlockedDate: '10 Aoû 2025', category: 'workout' },
-  { id: 'b8',  name: 'Demi-année',     icon: 'star-outline',               description: '24 semaines de streak entraînement',     condition: '24 sem. consécutives',unlocked: true,  unlockedDate: '1 Mar 2026',  category: 'workout' },
+  { id: 'b1',  name: 'Premier pas',    icon: 'footsteps-outline',          description: 'Compléter sa première séance',            condition: '1 séance',            unlocked: false, category: 'workout' },
+  { id: 'b2',  name: 'Semaine complète', icon: 'calendar-outline',         description: '5 séances en une semaine',                condition: '5 séances/semaine',   unlocked: false, category: 'workout' },
+  { id: 'b3',  name: 'Machine',        icon: 'flame-outline',              description: '4 semaines de streak consécutives',       condition: '4 sem. consécutives', unlocked: false, category: 'workout' },
+  { id: 'b4',  name: 'Inarrêtable',   icon: 'infinite-outline',           description: '12 semaines de streak consécutives',      condition: '12 sem. consécutives',unlocked: false, category: 'workout' },
+  { id: 'b5',  name: 'Centurion',      icon: 'trophy-outline',             description: '100 séances totales',                     condition: '100 séances',         unlocked: false, category: 'workout' },
+  { id: 'b6',  name: 'Tonnage',        icon: 'barbell-outline',            description: 'Soulever 100 000 kg au total',            condition: '100 000 kg',          unlocked: false, category: 'workout' },
+  { id: 'b7',  name: 'PR Hunter',      icon: 'medal-outline',              description: 'Battre 10 records personnels',            condition: '10 PRs battus',       unlocked: false, category: 'workout' },
+  { id: 'b8',  name: 'Demi-année',     icon: 'star-outline',               description: '24 semaines de streak entraînement',     condition: '24 sem. consécutives',unlocked: false, category: 'workout' },
   { id: 'b9',  name: 'Hydraté',        icon: 'water-outline',              description: '7 jours consécutifs à atteindre l\'objectif eau', condition: '7 jours consécutifs', unlocked: false, category: 'water' },
   { id: 'b10', name: 'Chameau',        icon: 'sunny-outline',              description: '30 jours de streak eau',                  condition: '30 jours consécutifs',unlocked: false, category: 'water' },
   { id: 'b11', name: 'Macro Master',   icon: 'checkmark-circle-outline',   description: '7 jours consécutifs de tracking complet', condition: '7 jours de tracking', unlocked: false, category: 'general' },
   { id: 'b12', name: 'Régulier',       icon: 'clipboard-outline',          description: '30 jours de tracking nutrition',          condition: '30 jours tracking',   unlocked: false, category: 'general' },
 ];
 
-const INIT_XP = 4850;
-const { level: INIT_LEVEL, xpToNextLevel: INIT_NEXT } = computeLevel(INIT_XP);
+const { level: INIT_LEVEL, xpToNextLevel: INIT_NEXT } = computeLevel(0);
 
 export const useGamificationStore = create<GamificationState>((set, get) => ({
-  workoutStreakWeeks: 24,
+  workoutStreakWeeks: 0,
   workoutStreakTarget: 5,
-  workoutsThisWeek: 4,
-  waterStreakDays: 3,
-  totalXp: INIT_XP,
+  workoutsThisWeek: 0,
+  workoutStreakDays: 0,
+  lastWorkoutDate: null,
+  waterStreakDays: 0,
+  totalXp: 0,
   level: INIT_LEVEL,
   xpToNextLevel: INIT_NEXT,
   badges: INITIAL_BADGES,
@@ -516,12 +519,30 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
 
   completeWorkout: () =>
     set((state) => {
+      const today = getTodayStr();
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const isNewDay = state.lastWorkoutDate !== today;
+      const streakContinues = state.lastWorkoutDate === yesterday || state.lastWorkoutDate === today;
+      const workoutStreakDays = !isNewDay
+        ? state.workoutStreakDays
+        : streakContinues
+        ? state.workoutStreakDays + 1
+        : 1;
+
       const count = state.workoutsThisWeek + 1;
       const xp = state.totalXp + 50;
       const { level, xpToNextLevel } = computeLevel(xp);
       const weeks = count >= state.workoutStreakTarget
         ? state.workoutStreakWeeks + 1
         : state.workoutStreakWeeks;
-      return { workoutsThisWeek: count, workoutStreakWeeks: weeks, totalXp: xp, level, xpToNextLevel };
+      return {
+        workoutsThisWeek: count,
+        workoutStreakWeeks: weeks,
+        workoutStreakDays,
+        lastWorkoutDate: today,
+        totalXp: xp,
+        level,
+        xpToNextLevel,
+      };
     }),
 }));

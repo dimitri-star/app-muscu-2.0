@@ -7,6 +7,7 @@ import {
   StyleSheet,
   StatusBar,
   Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -115,6 +116,27 @@ function getHeaderStyles(colors: ThemeColors) {
     streakLbl: { color: colors.textSecondary, fontSize: 11 },
     editBtn: { borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
     editBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    // Edit modal styles
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+    modalCard: { backgroundColor: colors.card, borderRadius: 16, padding: 24, width: '100%' },
+    modalTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 20, textAlign: 'center' },
+    inputLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+    input: {
+      backgroundColor: colors.background,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      color: colors.text,
+      fontSize: 15,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: colors.separator,
+    },
+    modalBtnRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+    modalBtnCancel: { flex: 1, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+    modalBtnCancelText: { color: colors.textSecondary, fontSize: 15, fontWeight: '600' },
+    modalBtnSave: { flex: 1, backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+    modalBtnSaveText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   });
 }
 
@@ -126,14 +148,43 @@ function ProfileHeader() {
   const { savedWorkouts } = useWorkoutStore();
   const xpPct = Math.min(totalXp / xpToNextLevel, 1);
 
+  // Edit modal state
+  const [showEdit, setShowEdit] = useState(false);
+  const [editName, setEditName] = useState(userProfile.name);
+  const [editUsername, setEditUsername] = useState(userProfile.username);
+  const [editBio, setEditBio] = useState(userProfile.bio);
+
+  // Local display state (updated on save)
+  const [displayName, setDisplayName] = useState(userProfile.name);
+  const [displayUsername, setDisplayUsername] = useState(userProfile.username);
+  const [displayBio, setDisplayBio] = useState(userProfile.bio);
+
+  const handleOpenEdit = () => {
+    setEditName(displayName);
+    setEditUsername(displayUsername);
+    setEditBio(displayBio);
+    setShowEdit(true);
+  };
+
+  const handleSave = () => {
+    setDisplayName(editName);
+    setDisplayUsername(editUsername);
+    setDisplayBio(editBio);
+    setShowEdit(false);
+  };
+
+  const handleCancel = () => {
+    setShowEdit(false);
+  };
+
   return (
     <View style={headerStyles.container}>
       <View style={headerStyles.avatarRow}>
         <View style={headerStyles.avatar} />
         <View style={headerStyles.userInfo}>
-          <Text style={headerStyles.name}>{userProfile.name}</Text>
-          <Text style={headerStyles.handle}>@{userProfile.username}</Text>
-          <Text style={headerStyles.bio}>{userProfile.bio}</Text>
+          <Text style={headerStyles.name}>{displayName}</Text>
+          <Text style={headerStyles.handle}>@{displayUsername}</Text>
+          <Text style={headerStyles.bio}>{displayBio}</Text>
         </View>
       </View>
       {/* XP bar */}
@@ -159,9 +210,52 @@ function ProfileHeader() {
           <Text style={headerStyles.streakLbl}>séances</Text>
         </View>
       </View>
-      <TouchableOpacity style={headerStyles.editBtn}>
+      <TouchableOpacity style={headerStyles.editBtn} onPress={handleOpenEdit} activeOpacity={0.7}>
         <Text style={headerStyles.editBtnText}>Modifier le profil</Text>
       </TouchableOpacity>
+
+      {/* Edit Profile Modal */}
+      <Modal visible={showEdit} transparent animationType="fade" onRequestClose={handleCancel}>
+        <View style={headerStyles.modalOverlay}>
+          <View style={headerStyles.modalCard}>
+            <Text style={headerStyles.modalTitle}>Modifier le profil</Text>
+            <Text style={headerStyles.inputLabel}>Nom</Text>
+            <TextInput
+              style={headerStyles.input}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Nom"
+              placeholderTextColor={colors.textTertiary}
+            />
+            <Text style={headerStyles.inputLabel}>Nom d'utilisateur</Text>
+            <TextInput
+              style={headerStyles.input}
+              value={editUsername}
+              onChangeText={setEditUsername}
+              placeholder="Nom d'utilisateur"
+              placeholderTextColor={colors.textTertiary}
+              autoCapitalize="none"
+            />
+            <Text style={headerStyles.inputLabel}>Bio</Text>
+            <TextInput
+              style={[headerStyles.input, { minHeight: 72, textAlignVertical: 'top' }]}
+              value={editBio}
+              onChangeText={setEditBio}
+              placeholder="Bio"
+              placeholderTextColor={colors.textTertiary}
+              multiline
+            />
+            <View style={headerStyles.modalBtnRow}>
+              <TouchableOpacity style={headerStyles.modalBtnCancel} onPress={handleCancel} activeOpacity={0.7}>
+                <Text style={headerStyles.modalBtnCancelText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={headerStyles.modalBtnSave} onPress={handleSave} activeOpacity={0.8}>
+                <Text style={headerStyles.modalBtnSaveText}>Enregistrer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -466,12 +560,26 @@ function getCalStyles(colors: ThemeColors) {
     dayCell: { flex: 1, alignItems: 'center', paddingVertical: 4 },
     dayBadge: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
     dayBadgeWorkout: { backgroundColor: colors.text },
+    dayBadgeSelected: { backgroundColor: colors.accent },
     dayText: { color: colors.textSecondary, fontSize: 14, fontWeight: '400' },
     dayTextWorkout: { color: colors.background, fontWeight: '700' },
+    dayTextSelected: { color: '#fff', fontWeight: '700' },
     legend: { flexDirection: 'row', gap: 20, marginTop: 16, justifyContent: 'center' },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     legendDot: { width: 10, height: 10, borderRadius: 5 },
     legendText: { color: colors.textSecondary, fontSize: 12 },
+    // Workout detail modal styles
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalSheet: { backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 36 },
+    modalHandle: { width: 40, height: 4, backgroundColor: colors.separator, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+    modalWorkoutDate: { color: colors.textSecondary, fontSize: 13, marginBottom: 4, textAlign: 'center' },
+    modalWorkoutName: { color: colors.text, fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 20 },
+    modalStatsRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 24 },
+    modalStatItem: { alignItems: 'center' },
+    modalStatValue: { color: colors.text, fontSize: 22, fontWeight: '800', marginBottom: 2 },
+    modalStatLabel: { color: colors.textSecondary, fontSize: 12 },
+    modalCloseBtn: { backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+    modalCloseBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   });
 }
 
@@ -484,10 +592,25 @@ function CalendrierContent() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-based
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const tabStyles = useMemo(() => getTabStyles(colors), [isDark]);
   const calStyles = useMemo(() => getCalStyles(colors), [isDark]);
+  const { savedWorkouts } = useWorkoutStore();
+
+  // Build a date map: YYYY-MM-DD -> workout object
+  const workoutDateMap = useMemo(() => {
+    const map: Record<string, typeof savedWorkouts[0]> = {};
+    for (const w of savedWorkouts) {
+      // w.date may be a full ISO string or YYYY-MM-DD
+      const dateKey = w.date.slice(0, 10);
+      map[dateKey] = w;
+    }
+    return map;
+  }, [savedWorkouts]);
+
+  const selectedWorkout = selectedDate ? workoutDateMap[selectedDate] ?? null : null;
 
   const goBack = () => {
     if (month === 0) { setMonth(11); setYear((y) => y - 1); }
@@ -531,12 +654,33 @@ function CalendrierContent() {
       {rows.map((row, rowIndex) => (
         <View key={rowIndex} style={calStyles.weekRow}>
           {row.map((day, colIndex) => {
-            const hasWorkout = day !== null && WORKOUT_DAYS.includes(day);
+            const dateKey = day !== null
+              ? `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+              : null;
+            const hasWorkout = dateKey !== null && dateKey in workoutDateMap;
+            const isSelected = dateKey !== null && dateKey === selectedDate;
             return (
-              <TouchableOpacity key={colIndex} style={calStyles.dayCell} disabled={day === null}>
+              <TouchableOpacity
+                key={colIndex}
+                style={calStyles.dayCell}
+                disabled={day === null || !hasWorkout}
+                onPress={() => {
+                  if (day !== null && hasWorkout && dateKey) {
+                    setSelectedDate(dateKey);
+                  }
+                }}
+              >
                 {day !== null && (
-                  <View style={[calStyles.dayBadge, hasWorkout && calStyles.dayBadgeWorkout]}>
-                    <Text style={[calStyles.dayText, hasWorkout && calStyles.dayTextWorkout]}>{day}</Text>
+                  <View style={[
+                    calStyles.dayBadge,
+                    hasWorkout && calStyles.dayBadgeWorkout,
+                    isSelected && calStyles.dayBadgeSelected,
+                  ]}>
+                    <Text style={[
+                      calStyles.dayText,
+                      hasWorkout && calStyles.dayTextWorkout,
+                      isSelected && calStyles.dayTextSelected,
+                    ]}>{day}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -555,6 +699,50 @@ function CalendrierContent() {
         </View>
       </View>
       <View style={{ height: 40 }} />
+
+      {/* Workout detail bottom-sheet modal */}
+      <Modal
+        visible={selectedDate !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedDate(null)}
+      >
+        <View style={calStyles.modalOverlay}>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => setSelectedDate(null)}
+          />
+          <View style={calStyles.modalSheet}>
+            <View style={calStyles.modalHandle} />
+            {selectedWorkout && (
+              <>
+                <Text style={calStyles.modalWorkoutDate}>
+                  {new Date(selectedWorkout.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </Text>
+                <Text style={calStyles.modalWorkoutName}>{selectedWorkout.name}</Text>
+                <View style={calStyles.modalStatsRow}>
+                  <View style={calStyles.modalStatItem}>
+                    <Text style={calStyles.modalStatValue}>{selectedWorkout.duration}</Text>
+                    <Text style={calStyles.modalStatLabel}>minutes</Text>
+                  </View>
+                  <View style={calStyles.modalStatItem}>
+                    <Text style={calStyles.modalStatValue}>{(selectedWorkout.totalVolume / 1000).toFixed(1)} t</Text>
+                    <Text style={calStyles.modalStatLabel}>volume</Text>
+                  </View>
+                  <View style={calStyles.modalStatItem}>
+                    <Text style={calStyles.modalStatValue}>{selectedWorkout.exercises?.length ?? 0}</Text>
+                    <Text style={calStyles.modalStatLabel}>exercices</Text>
+                  </View>
+                </View>
+              </>
+            )}
+            <TouchableOpacity style={calStyles.modalCloseBtn} onPress={() => setSelectedDate(null)} activeOpacity={0.8}>
+              <Text style={calStyles.modalCloseBtnText}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
