@@ -34,6 +34,7 @@ import {
   bodyWeightData,
   recentSessions,
 } from "@/lib/mockData";
+import { useUserStore } from "@/lib/userStore";
 
 const ACCENT = "#1DB954";
 const CARD_BG = "#FFFFFF";
@@ -41,11 +42,13 @@ const BORDER = "#E5E5E5";
 const MUTED = "#666666";
 
 export default function DashboardPage() {
+  const { profile } = useUserStore();
+
   return (
     <div className="p-8 space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-[#1A1A1A]">Dashboard</h1>
+        <h1 className="text-3xl font-bold text-[#1A1A1A]">Bonjour, {profile.name.split(" ")[0]} 👋</h1>
         <p style={{ color: MUTED }} className="mt-1 text-sm">
           Semaine du 3 — 9 Mars 2026
         </p>
@@ -131,7 +134,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-end gap-2">
               <span className="text-3xl font-bold text-[#1A1A1A]">
-                {dashboardStats.bodyWeight}
+                {profile.weight}
               </span>
               <span style={{ color: MUTED }} className="text-sm mb-0.5">
                 kg
@@ -171,7 +174,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-1 mt-2">
               <TrendingUp className="w-3 h-3" style={{ color: ACCENT }} />
               <span className="text-xs" style={{ color: ACCENT }}>
-                Cible: 2 500 kcal
+                Cible: {profile.macros.kcal.toLocaleString("fr-FR")} kcal
               </span>
             </div>
           </CardContent>
