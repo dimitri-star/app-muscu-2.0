@@ -140,22 +140,23 @@ function getSeanceStyles(colors: ThemeColors) {
     dot: { width: 8, height: 8, borderRadius: 4 },
     dotDone: { backgroundColor: colors.accent },
     dotPending: { backgroundColor: colors.textTertiary },
-    tableHeader: { flexDirection: 'row', paddingHorizontal: 14, paddingBottom: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
-    colHead: { color: colors.textSecondary, fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
-    colNum: { width: 24, textAlign: 'center' },
-    colInput: { flex: 1, textAlign: 'center' },
-    colRpe: { width: 44, textAlign: 'center' },
-    colCheck: { width: 38 },
-    setRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 6 },
-    setNum: { color: colors.textSecondary, fontSize: 13, textAlign: 'center' },
-    setInput: { color: colors.text, fontSize: 14, fontWeight: '600', backgroundColor: colors.input, borderRadius: 8, marginHorizontal: 3, paddingHorizontal: 6, paddingVertical: 5, textAlign: 'center' },
-    rpeInput: { color: colors.accent, fontSize: 13, fontWeight: '700', backgroundColor: colors.input, borderRadius: 8, marginHorizontal: 3, paddingHorizontal: 4, paddingVertical: 5, textAlign: 'center', width: 38 },
-    rpePlaceholder: { color: colors.textTertiary, fontSize: 11 },
+    tableHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingBottom: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
+    colHead: { color: colors.textSecondary, fontSize: 10, fontWeight: '600', textTransform: 'uppercase' },
+    colNum: { width: 20, minWidth: 20, textAlign: 'center' },
+    colReps: { flex: 1, minWidth: 0, textAlign: 'center' },
+    colKg: { flex: 1, minWidth: 0, textAlign: 'center' },
+    colRpe: { width: 30, minWidth: 30, textAlign: 'center' },
+    colCheck: { width: 28, minWidth: 28, alignItems: 'center', justifyContent: 'center' },
+    setRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 4 },
+    setNum: { color: colors.textSecondary, fontSize: 12, textAlign: 'center' },
+    setInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: 12, fontWeight: '600', backgroundColor: colors.input, borderRadius: 6, marginHorizontal: 1, paddingHorizontal: 2, paddingVertical: 5, textAlign: 'center' },
+    rpeInput: { color: colors.accent, fontSize: 11, fontWeight: '700', backgroundColor: colors.input, borderRadius: 6, marginHorizontal: 1, paddingHorizontal: 2, paddingVertical: 5, textAlign: 'center', width: 26, minWidth: 26 },
+    rpePlaceholder: { color: colors.textTertiary, fontSize: 10 },
     checkbox: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: colors.textTertiary, alignItems: 'center', justifyContent: 'center' },
     checkboxDone: { backgroundColor: colors.accent, borderColor: colors.accent },
-    notesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
-    notesInput: { flex: 1, color: colors.textSecondary, fontSize: 13, backgroundColor: colors.input, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, minHeight: 32 },
-    addSetBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator, marginHorizontal: 14, marginBottom: 4 },
+    notesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
+    notesInput: { flex: 1, minWidth: 0, color: colors.textSecondary, fontSize: 13, backgroundColor: colors.input, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, minHeight: 32 },
+    addSetBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator, marginHorizontal: 8, marginBottom: 4 },
     addSetText: { color: colors.text, fontSize: 13, fontWeight: '500' },
   });
 }
@@ -180,10 +181,10 @@ function ExerciseCard({ ex, styles: sc, colors }: { ex: WorkoutExercise; styles:
         <>
           {/* Column headers */}
           <View style={sc.tableHeader}>
-            <Text style={[sc.colHead, sc.colNum]}>#</Text>
-            <Text style={[sc.colHead, sc.colInput]}>Reps</Text>
-            <Text style={[sc.colHead, sc.colInput]}>kg</Text>
-            <Text style={[sc.colHead, sc.colRpe]}>RPE</Text>
+            <Text style={[sc.colHead, sc.colNum]} numberOfLines={1}>#</Text>
+            <Text style={[sc.colHead, sc.colReps]} numberOfLines={1}>Reps</Text>
+            <Text style={[sc.colHead, sc.colKg]} numberOfLines={1}>kg</Text>
+            <Text style={[sc.colHead, sc.colRpe]} numberOfLines={1}>RPE</Text>
             <Text style={[sc.colHead, sc.colCheck]}>✓</Text>
           </View>
           {/* Set rows */}
@@ -197,14 +198,14 @@ function ExerciseCard({ ex, styles: sc, colors }: { ex: WorkoutExercise; styles:
                 <Text style={[sc.setNum, sc.colNum]}>{i + 1}</Text>
               )}
               <TextInput
-                style={[sc.setInput, sc.colInput]}
+                style={[sc.setInput, sc.colReps]}
                 value={String(s.reps)}
                 keyboardType="numeric"
                 onChangeText={(v) => updateSet(ex.id, s.id, 'reps', parseInt(v) || 0)}
                 placeholderTextColor={colors.textTertiary}
               />
               <TextInput
-                style={[sc.setInput, sc.colInput]}
+                style={[sc.setInput, sc.colKg]}
                 value={s.weight > 0 ? String(s.weight) : ''}
                 placeholder="0"
                 keyboardType="decimal-pad"
