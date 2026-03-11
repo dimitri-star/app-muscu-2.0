@@ -12,9 +12,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
-import Colors from '../../constants/colors';
-import { recentWorkouts } from '../../constants/mockData';
-import { useProgramStore, type ProgramDay, type DayType } from '../../store/index';
+import { useThemeStore } from '../../store/theme';
+import { getColors } from '../../constants/theme';
+import { useProgramStore, useWorkoutStore, type ProgramDay, type DayType } from '../../store/index';
 import { PROGRAMME_API } from '../../constants/api';
 
 const { width: SW } = Dimensions.get('window');
@@ -52,6 +52,8 @@ function ProgressRing({
   stroke?: number;
   color: string;
 }) {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const offset = circ - (pct / 100) * circ;
@@ -62,7 +64,7 @@ function ProgressRing({
         cx={size / 2}
         cy={size / 2}
         r={r}
-        stroke={Colors.border}
+        stroke={colors.border}
         strokeWidth={stroke}
         fill="none"
       />
@@ -83,6 +85,50 @@ function ProgressRing({
 
 // ─── Day Pill ─────────────────────────────────────────────────────────────────
 
+function getPillStyles(colors: ReturnType<typeof getColors>) {
+  return StyleSheet.create({
+    wrap: {
+      alignItems: 'center',
+      paddingTop: 10,
+      paddingBottom: 8,
+      paddingHorizontal: 8,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      minWidth: 52,
+      gap: 6,
+      position: 'relative',
+    },
+    wrapToday: {
+      borderStyle: 'dashed',
+      borderColor: colors.textSecondary,
+    },
+    todayDot: {
+      position: 'absolute',
+      top: 5,
+      right: 5,
+      width: 5,
+      height: 5,
+      borderRadius: 2.5,
+    },
+    day: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    labelWrap: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+    },
+    label: {
+      fontSize: 9,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+  });
+}
+
 function DayPill({
   shortDay,
   label,
@@ -100,8 +146,11 @@ function DayPill({
   color: string;
   onPress: () => void;
 }) {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const pill = getPillStyles(colors);
   const isRest = type === 'rest';
-  const displayColor = isRest ? Colors.textMuted : color;
+  const displayColor = isRest ? colors.textMuted : color;
 
   return (
     <TouchableOpacity
@@ -120,10 +169,10 @@ function DayPill({
       <View
         style={[
           pill.labelWrap,
-          { backgroundColor: isSelected ? `${displayColor}25` : Colors.cardElevated },
+          { backgroundColor: isSelected ? `${displayColor}25` : colors.cardElevated },
         ]}
       >
-        <Text style={[pill.label, { color: isSelected ? displayColor : Colors.textMuted }]}>
+        <Text style={[pill.label, { color: isSelected ? displayColor : colors.textMuted }]}>
           {DAY_LABELS[type]}
         </Text>
       </View>
@@ -131,51 +180,156 @@ function DayPill({
   );
 }
 
-const pill = StyleSheet.create({
-  wrap: {
-    alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 8,
-    paddingHorizontal: 8,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    minWidth: 52,
-    gap: 6,
-    position: 'relative',
-  },
-  wrapToday: {
-    borderStyle: 'dashed',
-    borderColor: Colors.textSecondary,
-  },
-  todayDot: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  day: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  labelWrap: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  label: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-});
-
 // ─── Day Banner ───────────────────────────────────────────────────────────────
 
+function getDetailStyles(colors: ReturnType<typeof getColors>) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 20,
+      marginBottom: 16,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    banner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+      paddingLeft: 20,
+      position: 'relative',
+    },
+    bannerAccent: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 4,
+      borderTopLeftRadius: 20,
+    },
+    bannerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      flex: 1,
+    },
+    bannerEmoji: {
+      fontSize: 28,
+    },
+    bannerType: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 1.5,
+      marginBottom: 1,
+    },
+    bannerDay: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: '800',
+      letterSpacing: -0.3,
+    },
+    bannerLabel: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginTop: 1,
+    },
+    startBtn: {
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: 12,
+      flexShrink: 0,
+    },
+    startBtnText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    body: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 16,
+      gap: 10,
+    },
+    restWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 8,
+    },
+    restEmoji: {
+      fontSize: 28,
+    },
+    restTitle: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    restSub: {
+      color: colors.textMuted,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    exRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      paddingVertical: 2,
+    },
+    exNum: {
+      width: 30,
+      height: 30,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+      marginTop: 2,
+    },
+    exNumText: {
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    exBody: {
+      flex: 1,
+      gap: 5,
+    },
+    exName: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    exChips: {
+      flexDirection: 'row',
+      gap: 6,
+    },
+    chip: {
+      paddingHorizontal: 9,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    chipText: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    chipRest: {
+      paddingHorizontal: 9,
+      paddingVertical: 3,
+      borderRadius: 6,
+      backgroundColor: colors.cardElevated,
+    },
+    chipRestText: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: '600',
+    },
+  });
+}
+
 function DayDetail({ program }: { program: ProgramDay }) {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const detail = getDetailStyles(colors);
   const isRest = program.type === 'rest';
   const color = program.color;
 
@@ -239,149 +393,79 @@ function DayDetail({ program }: { program: ProgramDay }) {
   );
 }
 
-const detail = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    marginBottom: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    paddingLeft: 20,
-    position: 'relative',
-  },
-  bannerAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    borderTopLeftRadius: 20,
-  },
-  bannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  bannerEmoji: {
-    fontSize: 28,
-  },
-  bannerType: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    marginBottom: 1,
-  },
-  bannerDay: {
-    color: Colors.text,
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-  },
-  bannerLabel: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    marginTop: 1,
-  },
-  startBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 12,
-    flexShrink: 0,
-  },
-  startBtnText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  body: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
-    gap: 10,
-  },
-  restWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 8,
-  },
-  restEmoji: {
-    fontSize: 28,
-  },
-  restTitle: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  restSub: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  exRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 2,
-  },
-  exNum: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginTop: 2,
-  },
-  exNumText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  exBody: {
-    flex: 1,
-    gap: 5,
-  },
-  exName: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  exChips: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  chip: {
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  chipText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  chipRest: {
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: Colors.cardElevated,
-  },
-  chipRestText: {
-    color: Colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-});
 
 // ─── Week Row ─────────────────────────────────────────────────────────────────
+
+function getWeekRowStyles(colors: ReturnType<typeof getColors>) {
+  return StyleSheet.create({
+    wrap: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: 'hidden',
+    },
+    stripe: {
+      width: 4,
+      borderTopLeftRadius: 14,
+      borderBottomLeftRadius: 14,
+    },
+    inner: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      gap: 12,
+    },
+    dayBox: {
+      width: 44,
+      height: 44,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative',
+    },
+    dayText: {
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    todayDot: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      width: 5,
+      height: 5,
+      borderRadius: 2.5,
+    },
+    info: {
+      flex: 1,
+    },
+    label: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    sub: {
+      color: colors.textMuted,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    badge: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 8,
+    },
+    badgeText: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+    },
+  });
+}
 
 function WeekRow({
   day,
@@ -396,8 +480,11 @@ function WeekRow({
   isToday: boolean;
   onPress: () => void;
 }) {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const weekRow = getWeekRowStyles(colors);
   const isRest = day.type === 'rest';
-  const color = isRest ? Colors.textMuted : day.color;
+  const color = isRest ? colors.textMuted : day.color;
 
   return (
     <TouchableOpacity
@@ -438,84 +525,20 @@ function WeekRow({
   );
 }
 
-const weekRow = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-  },
-  stripe: {
-    width: 4,
-    borderTopLeftRadius: 14,
-    borderBottomLeftRadius: 14,
-  },
-  inner: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 12,
-  },
-  dayBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  dayText: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  todayDot: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  info: {
-    flex: 1,
-  },
-  label: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  sub: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-});
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ProgrammeScreen() {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const s = getScreenStyles(colors);
   const todayIndex = new Date().getDay();
   const adjustedToday = todayIndex === 0 ? 6 : todayIndex - 1;
   const [selectedDay, setSelectedDay] = useState(adjustedToday);
   const [refreshing, setRefreshing] = useState(false);
 
   const { program, isLoading, lastSynced, syncError, fetchProgram } = useProgramStore();
+  const { savedWorkouts } = useWorkoutStore();
 
   useFocusEffect(
     useCallback(() => {
@@ -543,7 +566,7 @@ export default function ProgrammeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={Colors.accent}
+            tintColor={colors.accent}
           />
         }
       >
@@ -552,7 +575,7 @@ export default function ProgrammeScreen() {
           <Text style={s.title}>Programme</Text>
           <View style={s.headerRight}>
             {isLoading && !refreshing && (
-              <ActivityIndicator size="small" color={Colors.accent} />
+              <ActivityIndicator size="small" color={colors.accent} />
             )}
             {lastSynced && !syncError ? (
               <View style={s.syncBadge}>
@@ -561,7 +584,7 @@ export default function ProgrammeScreen() {
               </View>
             ) : syncError ? (
               <View style={[s.syncBadge, s.syncError]}>
-                <Text style={[s.syncText, { color: Colors.error }]}>Hors ligne</Text>
+                <Text style={[s.syncText, { color: colors.error }]}>Hors ligne</Text>
               </View>
             ) : null}
           </View>
@@ -590,7 +613,7 @@ export default function ProgrammeScreen() {
                 </View>
                 <View style={s.heroStatDivider} />
                 <View style={s.heroStat}>
-                  <Text style={[s.heroStatVal, { color: Colors.accent }]}>S{program.currentWeek}</Text>
+                  <Text style={[s.heroStatVal, { color: colors.accent }]}>S{program.currentWeek}</Text>
                   <Text style={s.heroStatLbl}>semaine</Text>
                 </View>
               </View>
@@ -598,7 +621,7 @@ export default function ProgrammeScreen() {
 
             {/* Right: circular progress */}
             <View style={s.heroRing}>
-              <ProgressRing pct={pct} size={90} stroke={7} color={Colors.accent} />
+              <ProgressRing pct={pct} size={90} stroke={7} color={colors.accent} />
               <View style={s.ringLabel}>
                 <Text style={s.ringPct}>{pct}%</Text>
                 <Text style={s.ringLbl}>done</Text>
@@ -607,7 +630,7 @@ export default function ProgrammeScreen() {
           </View>
         ) : isLoading ? (
           <View style={s.loadingCard}>
-            <ActivityIndicator color={Colors.accent} />
+            <ActivityIndicator color={colors.accent} />
             <Text style={s.loadingText}>Chargement...</Text>
           </View>
         ) : syncError ? (
@@ -666,8 +689,8 @@ export default function ProgrammeScreen() {
 
         {/* ── Recent Sessions ── */}
         <Text style={[s.sectionTitle, { marginTop: 8 }]}>Séances récentes</Text>
-        {recentWorkouts.slice(0, 3).map((workout, i) => {
-          const sessionColors = [Colors.info, Colors.accent, Colors.orange];
+        {savedWorkouts.slice(0, 3).map((workout, i) => {
+          const sessionColors = [colors.info, colors.accent, colors.orange];
           const c = sessionColors[i % sessionColors.length];
           return (
             <View key={workout.id} style={[s.sessionCard, { borderLeftColor: c }]}>
@@ -697,215 +720,217 @@ export default function ProgrammeScreen() {
 
 // ─── Main Styles ──────────────────────────────────────────────────────────────
 
-const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  scroll: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 8 },
+function getScreenStyles(colors: ReturnType<typeof getColors>) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.background },
+    scroll: { flex: 1 },
+    content: { paddingHorizontal: 16, paddingTop: 8 },
 
-  // Header
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingTop: 8,
-  },
-  title: {
-    color: Colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  syncBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    backgroundColor: Colors.accentMuted,
-  },
-  syncError: { backgroundColor: 'rgba(255,76,76,0.1)' },
-  syncDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.accent,
-  },
-  syncText: { color: Colors.accent, fontSize: 11, fontWeight: '700' },
+    // Header
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 20,
+      paddingTop: 8,
+    },
+    title: {
+      color: colors.text,
+      fontSize: 28,
+      fontWeight: '800',
+      letterSpacing: -0.5,
+    },
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    syncBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 20,
+      backgroundColor: colors.accentMuted,
+    },
+    syncError: { backgroundColor: 'rgba(255,76,76,0.1)' },
+    syncDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.accent,
+    },
+    syncText: { color: colors.accent, fontSize: 11, fontWeight: '700' },
 
-  // Hero card
-  heroCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  heroLeft: { flex: 1 },
-  heroBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.accentMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    marginBottom: 10,
-  },
-  heroBadgeText: {
-    color: Colors.accent,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-  },
-  heroName: {
-    color: Colors.text,
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  heroDesc: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    marginBottom: 16,
-  },
-  heroStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  heroStat: { alignItems: 'center' },
-  heroStatVal: {
-    color: Colors.text,
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  heroStatLbl: {
-    color: Colors.textMuted,
-    fontSize: 10,
-    marginTop: 1,
-  },
-  heroStatDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: Colors.border,
-  },
-  heroRing: {
-    width: 90,
-    height: 90,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 12,
-  },
-  ringLabel: {
-    position: 'absolute',
-    alignItems: 'center',
-  },
-  ringPct: {
-    color: Colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  ringLbl: {
-    color: Colors.textMuted,
-    fontSize: 9,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
+    // Hero card
+    heroCard: {
+      backgroundColor: colors.card,
+      borderRadius: 20,
+      padding: 20,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    heroLeft: { flex: 1 },
+    heroBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: colors.accentMuted,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 20,
+      marginBottom: 10,
+    },
+    heroBadgeText: {
+      color: colors.accent,
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 1.5,
+    },
+    heroName: {
+      color: colors.text,
+      fontSize: 17,
+      fontWeight: '800',
+      letterSpacing: -0.3,
+      marginBottom: 4,
+    },
+    heroDesc: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginBottom: 16,
+    },
+    heroStats: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+    },
+    heroStat: { alignItems: 'center' },
+    heroStatVal: {
+      color: colors.text,
+      fontSize: 20,
+      fontWeight: '800',
+    },
+    heroStatLbl: {
+      color: colors.textMuted,
+      fontSize: 10,
+      marginTop: 1,
+    },
+    heroStatDivider: {
+      width: 1,
+      height: 28,
+      backgroundColor: colors.border,
+    },
+    heroRing: {
+      width: 90,
+      height: 90,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 12,
+    },
+    ringLabel: {
+      position: 'absolute',
+      alignItems: 'center',
+    },
+    ringPct: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    ringLbl: {
+      color: colors.textMuted,
+      fontSize: 9,
+      fontWeight: '600',
+      letterSpacing: 0.5,
+    },
 
-  // Loading / Error
-  loadingCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    padding: 40,
-    marginBottom: 24,
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  loadingText: { color: Colors.textSecondary, fontSize: 14 },
-  errorCard: {
-    backgroundColor: 'rgba(255,76,76,0.05)',
-    borderRadius: 20,
-    padding: 28,
-    marginBottom: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,76,76,0.15)',
-  },
-  errorEmoji: { fontSize: 32, marginBottom: 10 },
-  errorTitle: {
-    color: Colors.error,
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  errorSub: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  retryBtn: {
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: Colors.accentMuted,
-  },
-  retryText: { color: Colors.accent, fontSize: 13, fontWeight: '800' },
+    // Loading / Error
+    loadingCard: {
+      backgroundColor: colors.card,
+      borderRadius: 20,
+      padding: 40,
+      marginBottom: 24,
+      alignItems: 'center',
+      gap: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    loadingText: { color: colors.textSecondary, fontSize: 14 },
+    errorCard: {
+      backgroundColor: 'rgba(255,76,76,0.05)',
+      borderRadius: 20,
+      padding: 28,
+      marginBottom: 24,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: 'rgba(255,76,76,0.15)',
+    },
+    errorEmoji: { fontSize: 32, marginBottom: 10 },
+    errorTitle: {
+      color: colors.error,
+      fontSize: 16,
+      fontWeight: '800',
+      marginBottom: 6,
+    },
+    errorSub: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      textAlign: 'center',
+      lineHeight: 20,
+      marginBottom: 16,
+    },
+    retryBtn: {
+      paddingHorizontal: 22,
+      paddingVertical: 10,
+      borderRadius: 12,
+      backgroundColor: colors.accentMuted,
+    },
+    retryText: { color: colors.accent, fontSize: 13, fontWeight: '800' },
 
-  // Section title
-  sectionTitle: {
-    color: Colors.textMuted,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: 12,
-  },
+    // Section title
+    sectionTitle: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      marginBottom: 12,
+    },
 
-  // Day pills row
-  pillRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 2,
-    marginBottom: 16,
-  },
+    // Day pills row
+    pillRow: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: 2,
+      marginBottom: 16,
+    },
 
-  // Recent sessions
-  sessionCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 14,
-    paddingLeft: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderLeftWidth: 3,
-  },
-  sessionLeft: { flex: 1 },
-  sessionName: { color: Colors.text, fontSize: 14, fontWeight: '700' },
-  sessionDate: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    marginTop: 3,
-    textTransform: 'capitalize',
-  },
-  sessionBadge: {
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  sessionDur: { fontSize: 18, fontWeight: '800' },
-  sessionDurLbl: { fontSize: 10, fontWeight: '600', marginTop: 1 },
-});
+    // Recent sessions
+    sessionCard: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      padding: 14,
+      paddingLeft: 16,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderLeftWidth: 3,
+    },
+    sessionLeft: { flex: 1 },
+    sessionName: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    sessionDate: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginTop: 3,
+      textTransform: 'capitalize',
+    },
+    sessionBadge: {
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+    },
+    sessionDur: { fontSize: 18, fontWeight: '800' },
+    sessionDurLbl: { fontSize: 10, fontWeight: '600', marginTop: 1 },
+  });
+}

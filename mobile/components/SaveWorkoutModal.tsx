@@ -8,7 +8,11 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  Image,
+  Alert,
+  Platform,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../store/theme';
 import { getColors } from '../constants/theme';
@@ -89,7 +93,9 @@ export default function SaveWorkoutModal({
   const [soreness, setSoreness] = useState(0);
   const [visibility, setVisibility] = useState<VisibilityOption>('Tout le monde');
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
-  const [photoAdded, setPhotoAdded] = useState(false);
+
+  // Photos
+  const [photos, setPhotos] = useState<string[]>([]);
 
   const stats = computeStats(workoutData.exercises);
 
@@ -97,6 +103,78 @@ export default function SaveWorkoutModal({
     setSelectedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
+  };
+
+  const requestPermission = async (): Promise<boolean> => {
+    if (Platform.OS === 'web') return true;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission requise',
+        "Autorise l'accès à ta galerie dans les réglages pour ajouter des photos.",
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const handlePickPhoto = async () => {
+    const ok = await requestPermission();
+    if (!ok) return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.8,
+      selectionLimit: 5 - photos.length,
+    });
+
+    if (!result.canceled) {
+      const uris = result.assets.map((a) => a.uri);
+      setPhotos((prev) => [...prev, ...uris].slice(0, 5));
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    if (Platform.OS === 'web') {
+      handlePickPhoto();
+      return;
+    }
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission requise',
+        "Autorise l'accès à la caméra dans les réglages.",
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setPhotos((prev) => [...prev, result.assets[0].uri].slice(0, 5));
+    }
+  };
+
+  const handleRemovePhoto = (uri: string) => {
+    setPhotos((prev) => prev.filter((p) => p !== uri));
+  };
+
+  const showPhotoOptions = () => {
+    if (Platform.OS === 'web') {
+      handlePickPhoto();
+      return;
+    }
+    Alert.alert('Ajouter une photo', undefined, [
+      { text: 'Prendre une photo', onPress: handleTakePhoto },
+      { text: 'Choisir dans la galerie', onPress: handlePickPhoto },
+      { text: 'Annuler', style: 'cancel' },
+    ]);
   };
 
   const STAT_GRID = [
@@ -139,22 +217,60 @@ export default function SaveWorkoutModal({
             />
           </View>
 
-          {/* Photo placeholder */}
+          {/* Photos */}
           <View style={styles.section}>
-            <TouchableOpacity
-              style={[styles.photoPlaceholder, { backgroundColor: colors.card }]}
-              onPress={() => setPhotoAdded((p) => !p)}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name={photoAdded ? 'checkmark-circle-outline' : 'camera-outline'}
-                size={36}
-                color={colors.textTertiary}
-              />
-              <Text style={[styles.photoText, { color: colors.textSecondary }]}>
-                {photoAdded ? 'Photo ajoutee' : 'Ajouter une photo'}
-              </Text>
-            </TouchableOpacity>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+              Photos ({photos.length}/5)
+            </Text>
+
+            {/* Photos grid */}
+            {photos.length > 0 && (
+              <View style={styles.photosGrid}>
+                {photos.map((uri) => (
+                  <View key={uri} style={[styles.photoThumb, { backgroundColor: colors.card }]}>
+                    <Image source={{ uri }} style={styles.photoImg} resizeMode="cover" />
+                    <TouchableOpacity
+                      style={styles.photoRemove}
+                      onPress={() => handleRemovePhoto(uri)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="close-circle" size={22} color="#FF3B30" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                {photos.length < 5 && (
+                  <TouchableOpacity
+                    style={[styles.photoAddThumb, { backgroundColor: colors.card, borderColor: colors.separator }]}
+                    onPress={showPhotoOptions}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add" size={28} color={colors.textTertiary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* Empty state — big add button */}
+            {photos.length === 0 && (
+              <View style={styles.photoActions}>
+                <TouchableOpacity
+                  style={[styles.photoActionBtn, { backgroundColor: colors.card }]}
+                  onPress={handleTakePhoto}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="camera-outline" size={26} color={colors.text} />
+                  <Text style={[styles.photoActionText, { color: colors.text }]}>Prendre une photo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.photoActionBtn, { backgroundColor: colors.card }]}
+                  onPress={handlePickPhoto}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="images-outline" size={26} color={colors.text} />
+                  <Text style={[styles.photoActionText, { color: colors.text }]}>Choisir dans la galerie</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           {/* Description */}
@@ -228,23 +344,10 @@ export default function SaveWorkoutModal({
                 {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
                   <TouchableOpacity
                     key={n}
-                    style={[
-                      styles.ratingPill,
-                      {
-                        backgroundColor:
-                          effortRating === n ? colors.sliderActive : colors.sliderInactive,
-                      },
-                    ]}
+                    style={[styles.ratingPill, { backgroundColor: effortRating === n ? colors.sliderActive : colors.sliderInactive }]}
                     onPress={() => setEffortRating(n)}
                   >
-                    <Text
-                      style={[
-                        styles.ratingPillText,
-                        { color: effortRating === n ? '#000000' : colors.textSecondary },
-                      ]}
-                    >
-                      {n}
-                    </Text>
+                    <Text style={[styles.ratingPillText, { color: effortRating === n ? '#000000' : colors.textSecondary }]}>{n}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -256,23 +359,10 @@ export default function SaveWorkoutModal({
                     {Array.from({ length: 5 }, (_, i) => i + 1).map((n) => (
                       <TouchableOpacity
                         key={n}
-                        style={[
-                          styles.ratingPill,
-                          {
-                            backgroundColor:
-                              energyRating === n ? colors.sliderActive : colors.sliderInactive,
-                          },
-                        ]}
+                        style={[styles.ratingPill, { backgroundColor: energyRating === n ? colors.sliderActive : colors.sliderInactive }]}
                         onPress={() => setEnergyRating(n)}
                       >
-                        <Text
-                          style={[
-                            styles.ratingPillText,
-                            { color: energyRating === n ? '#000000' : colors.textSecondary },
-                          ]}
-                        >
-                          {n}
-                        </Text>
+                        <Text style={[styles.ratingPillText, { color: energyRating === n ? '#000000' : colors.textSecondary }]}>{n}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -284,23 +374,10 @@ export default function SaveWorkoutModal({
                     {Array.from({ length: 5 }, (_, i) => i + 1).map((n) => (
                       <TouchableOpacity
                         key={n}
-                        style={[
-                          styles.ratingPill,
-                          {
-                            backgroundColor:
-                              moodRating === n ? colors.sliderActive : colors.sliderInactive,
-                          },
-                        ]}
+                        style={[styles.ratingPill, { backgroundColor: moodRating === n ? colors.sliderActive : colors.sliderInactive }]}
                         onPress={() => setMoodRating(n)}
                       >
-                        <Text
-                          style={[
-                            styles.ratingPillText,
-                            { color: moodRating === n ? '#000000' : colors.textSecondary },
-                          ]}
-                        >
-                          {n}
-                        </Text>
+                        <Text style={[styles.ratingPillText, { color: moodRating === n ? '#000000' : colors.textSecondary }]}>{n}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -314,7 +391,6 @@ export default function SaveWorkoutModal({
             <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Récupération</Text>
 
             <View style={[styles.ratingCard, { backgroundColor: colors.card }]}>
-              {/* Sleep */}
               <View style={styles.sleepRow}>
                 <View style={styles.sleepLeft}>
                   <Text style={[styles.ratingTitle, { color: colors.text }]}>Sommeil</Text>
@@ -386,22 +462,12 @@ export default function SaveWorkoutModal({
               onPress={() => setShowVisibilityPicker((v) => !v)}
             >
               <Ionicons
-                name={
-                  visibility === 'Tout le monde'
-                    ? 'globe-outline'
-                    : visibility === 'Amis'
-                    ? 'people-outline'
-                    : 'lock-closed-outline'
-                }
+                name={visibility === 'Tout le monde' ? 'globe-outline' : visibility === 'Amis' ? 'people-outline' : 'lock-closed-outline'}
                 size={18}
                 color={colors.textSecondary}
               />
               <Text style={[styles.visibilityText, { color: colors.text }]}>{visibility}</Text>
-              <Ionicons
-                name={showVisibilityPicker ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color={colors.textSecondary}
-              />
+              <Ionicons name={showVisibilityPicker ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textSecondary} />
             </TouchableOpacity>
 
             {showVisibilityPicker && (
@@ -409,29 +475,13 @@ export default function SaveWorkoutModal({
                 {VISIBILITY_OPTIONS.map((opt) => (
                   <TouchableOpacity
                     key={opt}
-                    style={[
-                      styles.visibilityOption,
-                      { borderBottomColor: colors.separator },
-                    ]}
-                    onPress={() => {
-                      setVisibility(opt);
-                      setShowVisibilityPicker(false);
-                    }}
+                    style={[styles.visibilityOption, { borderBottomColor: colors.separator }]}
+                    onPress={() => { setVisibility(opt); setShowVisibilityPicker(false); }}
                   >
-                    <Text
-                      style={[
-                        styles.visibilityOptionText,
-                        {
-                          color: visibility === opt ? colors.accent : colors.text,
-                          fontWeight: visibility === opt ? '600' : '400',
-                        },
-                      ]}
-                    >
+                    <Text style={[styles.visibilityOptionText, { color: visibility === opt ? colors.accent : colors.text, fontWeight: visibility === opt ? '600' : '400' }]}>
                       {opt}
                     </Text>
-                    {visibility === opt && (
-                      <Ionicons name="checkmark" size={16} color={colors.accent} />
-                    )}
+                    {visibility === opt && <Ionicons name="checkmark" size={16} color={colors.accent} />}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -456,10 +506,10 @@ export default function SaveWorkoutModal({
   );
 }
 
+const PHOTO_SIZE = 100;
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -468,19 +518,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  scroll: {
-    padding: 16,
-  },
-  section: {
-    marginBottom: 20,
-  },
+  headerTitle: { fontSize: 18, fontWeight: '700' },
+  closeBtn: { padding: 4 },
+  scroll: { padding: 16 },
+  section: { marginBottom: 20 },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '600',
@@ -495,17 +536,53 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  photoPlaceholder: {
-    borderRadius: 14,
-    height: 120,
+  // Photos
+  photosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  photoThumb: {
+    width: PHOTO_SIZE,
+    height: PHOTO_SIZE,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  photoImg: {
+    width: PHOTO_SIZE,
+    height: PHOTO_SIZE,
+  },
+  photoRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+  },
+  photoAddThumb: {
+    width: PHOTO_SIZE,
+    height: PHOTO_SIZE,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  photoActions: {
+    flexDirection: 'row',
     gap: 10,
   },
-  photoText: {
-    fontSize: 14,
-    fontWeight: '500',
+  photoActionBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 20,
+    alignItems: 'center',
+    gap: 8,
   },
+  photoActionText: {
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  // Rest unchanged
   descInput: {
     borderRadius: 12,
     paddingHorizontal: 14,
@@ -513,129 +590,28 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minHeight: 80,
   },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tagPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  tagText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  statCard: {
-    width: '31%',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    textAlign: 'center',
-  },
-  ratingCard: {
-    borderRadius: 14,
-    padding: 16,
-    gap: 14,
-  },
-  ratingTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  ratingPill: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ratingPillText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  subRatingRow: {
-    flexDirection: 'row',
-    gap: 20,
-  },
-  subRatingBlock: {
-    flex: 1,
-  },
-  sleepRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 16,
-    marginBottom: 14,
-  },
-  sleepLeft: {
-    alignItems: 'center',
-    gap: 6,
-  },
-  sleepInput: {
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 18,
-    fontWeight: '700',
-    width: 56,
-    textAlign: 'center',
-  },
-  visibilityBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 10,
-  },
-  visibilityText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  visibilityOptions: {
-    borderRadius: 12,
-    marginTop: 4,
-    overflow: 'hidden',
-  },
-  visibilityOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  visibilityOptionText: {
-    fontSize: 15,
-  },
-  saveBtn: {
-    borderRadius: 14,
-    paddingVertical: 18,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  saveBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tagPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  tagText: { fontSize: 13, fontWeight: '500' },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  statCard: { width: '31%', borderRadius: 12, padding: 12, alignItems: 'center' },
+  statValue: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  statLabel: { fontSize: 11, textAlign: 'center' },
+  ratingCard: { borderRadius: 14, padding: 16, gap: 14 },
+  ratingTitle: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  ratingRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  ratingPill: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  ratingPillText: { fontSize: 13, fontWeight: '600' },
+  subRatingRow: { flexDirection: 'row', gap: 20 },
+  subRatingBlock: { flex: 1 },
+  sleepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 16, marginBottom: 14 },
+  sleepLeft: { alignItems: 'center', gap: 6 },
+  sleepInput: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, fontSize: 18, fontWeight: '700', width: 56, textAlign: 'center' },
+  visibilityBtn: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, gap: 10 },
+  visibilityText: { flex: 1, fontSize: 15, fontWeight: '500' },
+  visibilityOptions: { borderRadius: 12, marginTop: 4, overflow: 'hidden' },
+  visibilityOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  visibilityOptionText: { fontSize: 15 },
+  saveBtn: { borderRadius: 14, paddingVertical: 18, alignItems: 'center', marginTop: 8 },
+  saveBtnText: { fontSize: 16, fontWeight: '700' },
 });

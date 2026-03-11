@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import { Apple, Flame, ChevronDown, ChevronUp, Clock, Filter } from "lucide-react";
 import {
   AreaChart,
@@ -18,9 +17,9 @@ import {
 import { todayMacros, meals, weeklyMacros, recipes, nutritionPlan } from "@/lib/mockData";
 
 const ACCENT = "#1DB954";
-const CARD_BG = "#1A1A2E";
-const BORDER = "#2A2A3E";
-const MUTED = "#8888A0";
+const CARD_BG = "#FFFFFF";
+const BORDER = "#E5E5E5";
+const MUTED = "#888888";
 
 const macroColors = {
   Protéines: "#1DB954",
@@ -60,11 +59,11 @@ function MacroRing({
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-sm font-bold text-white">{pct}%</span>
+          <span className="text-sm font-bold text-gray-900">{pct}%</span>
         </div>
       </div>
       <div className="text-center">
-        <p className="text-xs font-semibold text-white">
+        <p className="text-xs font-semibold text-gray-900">
           {current}{unit}
           <span style={{ color: MUTED }}>/{target}{unit}</span>
         </p>
@@ -83,10 +82,10 @@ function MealAccordion({
   return (
     <div
       className="rounded-xl overflow-hidden"
-      style={{ border: `1px solid ${BORDER}`, backgroundColor: "#12122A" }}
+      style={{ border: `1px solid ${BORDER}`, backgroundColor: CARD_BG }}
     >
       <button
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-black/5 transition-colors"
         onClick={() => setOpen(!open)}
       >
         <div className="flex items-center gap-3">
@@ -97,14 +96,14 @@ function MealAccordion({
             <Apple className="w-4 h-4" style={{ color: ACCENT }} />
           </div>
           <div className="text-left">
-            <p className="text-sm font-semibold text-white">{meal.name}</p>
+            <p className="text-sm font-semibold text-gray-900">{meal.name}</p>
             <p className="text-xs" style={{ color: MUTED }}>{meal.time}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1">
             <Flame className="w-3.5 h-3.5" style={{ color: "#EF4444" }} />
-            <span className="text-sm font-bold text-white">{meal.calories}</span>
+            <span className="text-sm font-bold text-gray-900">{meal.calories}</span>
             <span className="text-xs" style={{ color: MUTED }}>kcal</span>
           </div>
           {open ? (
@@ -127,10 +126,10 @@ function MealAccordion({
           </div>
           {meal.items.map((item, i) => (
             <div key={i} className="grid grid-cols-4 gap-2 text-xs">
-              <span className="text-white">{item.name}</span>
+              <span className="text-gray-900">{item.name}</span>
               <span className="text-center" style={{ color: MUTED }}>{item.qty}</span>
               <span className="text-center" style={{ color: ACCENT }}>{item.protein}g</span>
-              <span className="text-right text-white">{item.calories}</span>
+              <span className="text-right text-gray-900">{item.calories}</span>
             </div>
           ))}
         </div>
@@ -152,7 +151,7 @@ export default function NutritionPage() {
     <div className="p-8 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">Nutrition</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Nutrition</h1>
         <p style={{ color: MUTED }} className="mt-1 text-sm">
           Suivi nutritionnel et plans alimentaires
         </p>
@@ -170,7 +169,7 @@ export default function NutritionPage() {
           {/* Macro rings */}
           <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
             <CardHeader>
-              <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+              <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                 <Flame className="w-4 h-4" style={{ color: "#EF4444" }} />
                 Macros du jour — 8 Mars 2026
               </CardTitle>
@@ -195,7 +194,7 @@ export default function NutritionPage() {
                       />
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-base font-black text-white">{todayMacros.calories.current}</span>
+                      <span className="text-base font-black text-gray-900">{todayMacros.calories.current}</span>
                       <span className="text-xs" style={{ color: MUTED }}>kcal</span>
                     </div>
                   </div>
@@ -217,7 +216,7 @@ export default function NutritionPage() {
                   <div key={m.label}>
                     <div className="flex justify-between text-xs mb-1">
                       <span style={{ color: MUTED }}>{m.label}</span>
-                      <span className="text-white font-medium">{m.current}g / {m.target}g</span>
+                      <span className="text-gray-900 font-medium">{m.current}g / {m.target}g</span>
                     </div>
                     <div className="h-1.5 rounded-full" style={{ backgroundColor: BORDER }}>
                       <div
@@ -236,7 +235,7 @@ export default function NutritionPage() {
 
           {/* Meals */}
           <div className="space-y-3">
-            <h2 className="text-base font-semibold text-white">Repas du jour</h2>
+            <h2 className="text-base font-semibold text-gray-900">Repas du jour</h2>
             {meals.map((meal) => (
               <MealAccordion key={meal.id} meal={meal} />
             ))}
@@ -245,7 +244,7 @@ export default function NutritionPage() {
           {/* Weekly macro chart */}
           <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
             <CardHeader>
-              <CardTitle className="text-sm font-semibold text-white">
+              <CardTitle className="text-sm font-semibold text-gray-900">
                 Macros hebdomadaires
               </CardTitle>
             </CardHeader>
@@ -257,10 +256,10 @@ export default function NutritionPage() {
                   <YAxis stroke={MUTED} tick={{ fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#12122A",
+                      backgroundColor: "#FFFFFF",
                       border: `1px solid ${BORDER}`,
                       borderRadius: 8,
-                      color: "#E8E8F0",
+                      color: "#1A1A1A",
                     }}
                   />
                   <Area type="monotone" dataKey="protein" stroke="#1DB954" fill="rgba(29,185,84,0.1)" strokeWidth={2} name="Protéines (g)" />
@@ -287,8 +286,8 @@ export default function NutritionPage() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-lg font-bold text-white">{nutritionPlan.name}</h2>
-                      <Badge style={{ backgroundColor: ACCENT, color: "#0F0F1A" }} className="text-xs font-bold">
+                      <h2 className="text-lg font-bold text-gray-900">{nutritionPlan.name}</h2>
+                      <Badge style={{ backgroundColor: ACCENT, color: "#FFFFFF" }} className="text-xs font-bold">
                         ACTIF
                       </Badge>
                     </div>
@@ -315,7 +314,7 @@ export default function NutritionPage() {
           {nutritionPlan.days.map((day, di) => (
             <Card key={di} style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold text-white">{day.day}</CardTitle>
+                <CardTitle className="text-sm font-semibold text-gray-900">{day.day}</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <table className="w-full">
@@ -331,7 +330,7 @@ export default function NutritionPage() {
                   <tbody>
                     {day.meals.map((meal, mi) => (
                       <tr key={mi} style={{ borderBottom: mi < day.meals.length - 1 ? `1px solid ${BORDER}` : "none" }}>
-                        <td className="px-4 py-2 text-sm text-white">{meal.name}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{meal.name}</td>
                         <td className="px-4 py-2 text-sm font-medium" style={{ color: "#EF4444" }}>{meal.calories}</td>
                         <td className="px-4 py-2 text-sm" style={{ color: ACCENT }}>{meal.protein}g</td>
                         <td className="px-4 py-2 text-sm" style={{ color: "#4C9BE8" }}>{meal.carbs}g</td>
@@ -356,8 +355,8 @@ export default function NutritionPage() {
                 onClick={() => setActiveRecipeFilter(tag)}
                 className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
                 style={{
-                  backgroundColor: activeRecipeFilter === tag ? ACCENT : "#2A2A3E",
-                  color: activeRecipeFilter === tag ? "#0F0F1A" : MUTED,
+                  backgroundColor: activeRecipeFilter === tag ? ACCENT : "#E5E5E5",
+                  color: activeRecipeFilter === tag ? "#FFFFFF" : MUTED,
                 }}
               >
                 {tag}
@@ -389,7 +388,7 @@ export default function NutritionPage() {
                     ))}
                   </div>
 
-                  <h3 className="text-base font-bold text-white mt-2">{recipe.name}</h3>
+                  <h3 className="text-base font-bold text-gray-900 mt-2">{recipe.name}</h3>
 
                   <div className="flex items-center gap-1 mt-1" style={{ color: MUTED }}>
                     <Clock className="w-3 h-3" />
@@ -417,7 +416,7 @@ export default function NutritionPage() {
 
                   <div className="mt-3 pt-3 border-t" style={{ borderColor: BORDER }}>
                     <p className="text-xs font-medium" style={{ color: MUTED }}>Ingrédients :</p>
-                    <p className="text-xs text-white mt-0.5">{recipe.ingredients.join(", ")}</p>
+                    <p className="text-xs text-gray-900 mt-0.5">{recipe.ingredients.join(", ")}</p>
                   </div>
                 </CardContent>
               </Card>

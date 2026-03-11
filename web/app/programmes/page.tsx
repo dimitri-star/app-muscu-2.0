@@ -24,9 +24,9 @@ import type { Program, ProgramDay, ProgramExercise, DayType } from "@/lib/progra
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ACCENT = "#1DB954";
-const CARD_BG = "#1A1A2E";
-const BORDER = "#2A2A3E";
-const MUTED = "#8888A0";
+const CARD_BG = "#FFFFFF";
+const BORDER = "#E5E5E5";
+const MUTED = "#888888";
 const BG = "#0F0F1A";
 
 const DAY_COLORS: Record<DayType, string> = {
@@ -66,14 +66,14 @@ function ExerciseRow({
     return (
       <div
         className="rounded-lg p-2 flex gap-2 items-start"
-        style={{ backgroundColor: "#0D0D20", border: `1px solid ${BORDER}` }}
+        style={{ backgroundColor: "#EEEEEE", border: `1px solid ${BORDER}` }}
       >
         <div className="flex-1 space-y-1.5">
           <input
             value={exercise.name}
             onChange={(e) => onUpdate("name", e.target.value)}
             placeholder="Nom de l'exercice"
-            className="w-full text-xs bg-transparent text-white border-b outline-none pb-0.5"
+            className="w-full text-xs bg-transparent text-gray-900 border-b outline-none pb-0.5"
             style={{ borderColor: color }}
           />
           <div className="flex gap-2">
@@ -104,8 +104,8 @@ function ExerciseRow({
   }
 
   return (
-    <div className="rounded-lg p-2" style={{ backgroundColor: "#12122A" }}>
-      <p className="text-xs font-medium text-white leading-tight">{exercise.name}</p>
+    <div className="rounded-lg p-2" style={{ backgroundColor: "#F5F5F5" }}>
+      <p className="text-xs font-medium text-gray-900 leading-tight">{exercise.name}</p>
       <p className="text-xs mt-0.5" style={{ color }}>
         {exercise.sets}
       </p>
@@ -141,7 +141,7 @@ function DayColumn({
     >
       {/* Day header */}
       <div className="mb-3 flex-shrink-0">
-        <p className="text-xs font-bold text-white mb-1">{day.day}</p>
+        <p className="text-xs font-bold text-gray-900 mb-1">{day.day}</p>
         {isEditing ? (
           <input
             value={day.label}
@@ -364,7 +364,7 @@ export default function ProgrammesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Programmes</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Programmes</h1>
           <p style={{ color: MUTED }} className="mt-1 text-sm">
             Gérez vos programmes d&apos;entraînement
           </p>
@@ -439,11 +439,11 @@ export default function ProgrammesPage() {
                     <input
                       value={program.name}
                       onChange={(e) => updateProgramField("name", e.target.value)}
-                      className="text-xl font-bold bg-transparent text-white border-b outline-none pb-0.5"
+                      className="text-xl font-bold bg-transparent text-gray-900 border-b outline-none pb-0.5"
                       style={{ borderColor: ACCENT, minWidth: 280 }}
                     />
                   ) : (
-                    <h2 className="text-xl font-bold text-white">{program.name}</h2>
+                    <h2 className="text-xl font-bold text-gray-900">{program.name}</h2>
                   )}
                   <Badge style={{ backgroundColor: ACCENT, color: BG }} className="text-xs font-bold">
                     ACTIF
@@ -476,25 +476,25 @@ export default function ProgrammesPage() {
             <div className="text-right flex-shrink-0">
               {isEditing ? (
                 <div className="flex items-center gap-1">
-                  <span className="text-white font-bold">S</span>
+                  <span className="text-gray-900 font-bold">S</span>
                   <input
                     type="number"
                     value={program.currentWeek}
                     onChange={(e) => updateProgramField("currentWeek", Number(e.target.value))}
-                    className="text-2xl font-bold bg-transparent text-white border-b outline-none w-8 text-center"
+                    className="text-2xl font-bold bg-transparent text-gray-900 border-b outline-none w-8 text-center"
                     style={{ borderColor: ACCENT }}
                   />
-                  <span className="text-white font-bold">/</span>
+                  <span className="text-gray-900 font-bold">/</span>
                   <input
                     type="number"
                     value={program.weeks}
                     onChange={(e) => updateProgramField("weeks", Number(e.target.value))}
-                    className="text-2xl font-bold bg-transparent text-white border-b outline-none w-8 text-center"
+                    className="text-2xl font-bold bg-transparent text-gray-900 border-b outline-none w-8 text-center"
                     style={{ borderColor: ACCENT }}
                   />
                 </div>
               ) : (
-                <p className="text-2xl font-bold text-white">
+                <p className="text-2xl font-bold text-gray-900">
                   S{program.currentWeek}/{program.weeks}
                 </p>
               )}
@@ -515,7 +515,7 @@ export default function ProgrammesPage() {
       <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${isEditing ? ACCENT + "50" : BORDER}` }}>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+            <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
               <Calendar className="w-4 h-4" style={{ color: ACCENT }} />
               Planning hebdomadaire
             </CardTitle>
@@ -557,12 +557,12 @@ export default function ProgrammesPage() {
                 <span className="text-sm">📱</span>
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">Synchronisation Mobile</p>
+                <p className="text-sm font-semibold text-gray-900">Synchronisation Mobile</p>
                 <p className="text-xs" style={{ color: MUTED }}>
                   L&apos;app mobile se met à jour automatiquement via{" "}
                   <code
                     className="px-1 py-0.5 rounded text-xs"
-                    style={{ backgroundColor: "#0D0D20", color: ACCENT }}
+                    style={{ backgroundColor: "#F0F0F0", color: ACCENT }}
                   >
                     /api/programme
                   </code>
@@ -573,7 +573,7 @@ export default function ProgrammesPage() {
               <button
                 onClick={handleExportJSON}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                style={{ backgroundColor: "#2A2A3E", color: "#CCC" }}
+                style={{ backgroundColor: "#E5E5E5", color: "#555555" }}
                 title="Télécharger le programme en JSON"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -582,7 +582,7 @@ export default function ProgrammesPage() {
               <button
                 onClick={handlePrint}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                style={{ backgroundColor: "#2A2A3E", color: "#CCC" }}
+                style={{ backgroundColor: "#E5E5E5", color: "#555555" }}
                 title="Imprimer / Exporter en PDF"
               >
                 <Printer className="w-3.5 h-3.5" />
@@ -602,7 +602,7 @@ export default function ProgrammesPage() {
 
       {/* Archived Programs */}
       <div>
-        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Archive className="w-5 h-5" style={{ color: MUTED }} />
           Programmes archivés
         </h2>
@@ -616,7 +616,7 @@ export default function ProgrammesPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div
                     className="w-9 h-9 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: "#2A2A3E" }}
+                    style={{ backgroundColor: "#E5E5E5" }}
                   >
                     <Dumbbell className="w-4 h-4" style={{ color: MUTED }} />
                   </div>
@@ -628,7 +628,7 @@ export default function ProgrammesPage() {
                     Terminé
                   </Badge>
                 </div>
-                <h3 className="text-sm font-semibold text-white mb-1">{prog.name}</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-1">{prog.name}</h3>
                 <p className="text-xs" style={{ color: MUTED }}>
                   {prog.duration} · {prog.period}
                 </p>

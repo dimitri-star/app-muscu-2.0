@@ -1,6 +1,8 @@
 import { create } from 'zustand';
-import { todayWorkout, todayMeals, DAILY_GOALS } from '../constants/mockData';
-import type { WorkoutExercise, MealEntry, WorkoutSet } from '../constants/mockData';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { todayWorkout, todayMeals, DAILY_GOALS, recentWorkouts } from '../constants/mockData';
+import type { WorkoutExercise, MealEntry, WorkoutSet, Workout } from '../constants/mockData';
 
 // ─── WATER STORE ──────────────────────────────────────────────────────────────
 
@@ -16,64 +18,104 @@ interface WaterState {
   goal: number;
   entries: WaterEntry[];
   weekHistory: { day: string; amount: number; goal: number }[];
+  lastResetDate: string;
   addWater: (amount: number) => void;
   removeEntry: (id: string) => void;
   resetWater: () => void;
   setGoal: (goal: number) => void;
+  checkAndResetDaily: () => void;
 }
 
-const initialEntries: WaterEntry[] = [
-  { id: 'w1', amount: 500, time: '07:30', timestamp: Date.now() - 5 * 3600000 },
-  { id: 'w2', amount: 250, time: '09:15', timestamp: Date.now() - 3.5 * 3600000 },
-  { id: 'w3', amount: 500, time: '11:00', timestamp: Date.now() - 2 * 3600000 },
-  { id: 'w4', amount: 250, time: '13:30', timestamp: Date.now() - 1 * 3600000 },
-];
+function getTodayStr(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getDayShortName(dateStr: string): string {
+  const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  return dayNames[new Date(dateStr).getDay()];
+}
 
 const initialWeekHistory = [
-  { day: 'Mar', amount: 2800, goal: 3100 },
-  { day: 'Mer', amount: 3100, goal: 3100 },
+  { day: 'Mer', amount: 2800, goal: 3100 },
   { day: 'Jeu', amount: 3100, goal: 3100 },
   { day: 'Ven', amount: 2400, goal: 3100 },
   { day: 'Sam', amount: 3100, goal: 3100 },
   { day: 'Dim', amount: 2600, goal: 3100 },
   { day: 'Lun', amount: 3100, goal: 3100 },
+  { day: 'Mar', amount: 1800, goal: 3100 },
 ];
 
-export const useWaterStore = create<WaterState>((set, get) => ({
-  current: initialEntries.reduce((acc, e) => acc + e.amount, 0),
-  goal: DAILY_GOALS.water,
-  entries: initialEntries,
-  weekHistory: initialWeekHistory,
+export const useWaterStore = create<WaterState>()(
+  persist(
+    (set, get) => ({
+      current: 0,
+      goal: DAILY_GOALS.water,
+      entries: [],
+      weekHistory: initialWeekHistory,
+      lastResetDate: getTodayStr(),
 
-  addWater: (amount) => {
-    const now = new Date();
-    const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    const newEntry: WaterEntry = {
-      id: `w_${Date.now()}`,
-      amount,
-      time,
-      timestamp: Date.now(),
-    };
-    set((state) => ({
-      current: Math.min(state.current + amount, state.goal),
-      entries: [...state.entries, newEntry],
-    }));
-  },
+      checkAndResetDaily: () => {
+        const state = get();
+        const today = getTodayStr();
+        if (state.lastResetDate === today) return;
 
-  removeEntry: (id) =>
-    set((state) => {
-      const entry = state.entries.find((e) => e.id === id);
-      if (!entry) return state;
-      return {
-        current: Math.max(0, state.current - entry.amount),
-        entries: state.entries.filter((e) => e.id !== id),
-      };
+        // Archive yesterday to weekHistory (keep last 7 days)
+        const dayName = getDayShortName(state.lastResetDate);
+        const newHistory = [
+          ...state.weekHistory.slice(-6),
+          { day: dayName, amount: state.current, goal: state.goal },
+        ];
+
+        set({
+          current: 0,
+          entries: [],
+          weekHistory: newHistory,
+          lastResetDate: today,
+        });
+      },
+
+      addWater: (amount) => {
+        const now = new Date();
+        const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const newEntry: WaterEntry = {
+          id: `w_${Date.now()}`,
+          amount,
+          time,
+          timestamp: Date.now(),
+        };
+        set((state) => ({
+          current: state.current + amount,
+          entries: [...state.entries, newEntry],
+        }));
+      },
+
+      removeEntry: (id) =>
+        set((state) => {
+          const entry = state.entries.find((e) => e.id === id);
+          if (!entry) return state;
+          return {
+            current: Math.max(0, state.current - entry.amount),
+            entries: state.entries.filter((e) => e.id !== id),
+          };
+        }),
+
+      resetWater: () => set({ current: 0, entries: [] }),
+
+      setGoal: (goal) => set({ goal }),
     }),
-
-  resetWater: () => set({ current: 0, entries: [] }),
-
-  setGoal: (goal) => set({ goal }),
-}));
+    {
+      name: 'water-store-v2',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        current: state.current,
+        goal: state.goal,
+        entries: state.entries,
+        weekHistory: state.weekHistory,
+        lastResetDate: state.lastResetDate,
+      }),
+    }
+  )
+);
 
 // ─── WORKOUT STORE ────────────────────────────────────────────────────────────
 
@@ -85,8 +127,10 @@ interface WorkoutState {
   restTimerActive: boolean;
   restTimerSeconds: number;
   restTimerTotal: number;
+  savedWorkouts: Workout[];
   startWorkout: () => void;
   endWorkout: () => void;
+  saveWorkout: (data: { name: string; duration: number; exercises: WorkoutExercise[] }) => void;
   tickTimer: () => void;
   toggleSetDone: (exerciseId: string, setId: string) => void;
   updateSet: (exerciseId: string, setId: string, field: keyof WorkoutSet, value: number | boolean) => void;
@@ -96,6 +140,7 @@ interface WorkoutState {
   addExerciseFromProgram: (exercise: import('../constants/mockData').Exercise, numSets: number, reps: number, restTime: number, notes?: string) => void;
   removeExercise: (exerciseId: string) => void;
   clearExercises: () => void;
+  deleteWorkout: (workoutId: string) => void;
   updateRestTime: (exerciseId: string, restTime: number) => void;
   updateNotes: (exerciseId: string, notes: string) => void;
   startRestTimer: (seconds: number) => void;
@@ -103,131 +148,177 @@ interface WorkoutState {
   stopRestTimer: () => void;
 }
 
-export const useWorkoutStore = create<WorkoutState>((set, get) => ({
-  isActive: false,
-  timerSeconds: 0,
-  workoutName: 'Mar — Dips Volume & Épaules',
-  exercises: todayWorkout,
-  restTimerActive: false,
-  restTimerSeconds: 90,
-  restTimerTotal: 90,
+export const useWorkoutStore = create<WorkoutState>()(
+  persist(
+    (set, get) => ({
+      isActive: false,
+      timerSeconds: 0,
+      workoutName: 'Mar — Dips Volume & Épaules',
+      exercises: todayWorkout,
+      restTimerActive: false,
+      restTimerSeconds: 90,
+      restTimerTotal: 90,
+      savedWorkouts: [...recentWorkouts],
 
-  startWorkout: () => set({ isActive: true, timerSeconds: 0 }),
-  endWorkout: () => set({ isActive: false }),
+      startWorkout: () => set({ isActive: true, timerSeconds: 0 }),
+      endWorkout: () => set({ isActive: false }),
 
-  tickTimer: () => set((state) => ({ timerSeconds: state.timerSeconds + 1 })),
+      saveWorkout: ({ name, duration, exercises }) => {
+        let totalVolume = 0;
+        let totalSets = 0;
+        exercises.forEach((ex) => {
+          ex.sets.forEach((s) => {
+            if (s.done) {
+              totalVolume += s.reps * s.weight;
+              totalSets++;
+            }
+          });
+        });
 
-  toggleSetDone: (exerciseId, setId) =>
-    set((state) => ({
-      exercises: state.exercises.map((ex) =>
-        ex.id === exerciseId
-          ? { ...ex, sets: ex.sets.map((s) => s.id === setId ? { ...s, done: !s.done } : s) }
-          : ex
-      ),
-    })),
-
-  updateSet: (exerciseId, setId, field, value) =>
-    set((state) => ({
-      exercises: state.exercises.map((ex) =>
-        ex.id === exerciseId
-          ? { ...ex, sets: ex.sets.map((s) => s.id === setId ? { ...s, [field]: value } : s) }
-          : ex
-      ),
-    })),
-
-  addSet: (exerciseId) =>
-    set((state) => ({
-      exercises: state.exercises.map((ex) => {
-        if (ex.id !== exerciseId) return ex;
-        const lastSet = ex.sets[ex.sets.length - 1];
-        const newSet: WorkoutSet = {
-          id: `set_${Date.now()}`,
-          reps: lastSet?.reps ?? 10,
-          weight: lastSet?.weight ?? 0,
-          done: false,
+        const today = new Date().toISOString().split('T')[0];
+        const newWorkout: Workout = {
+          id: `saved_${Date.now()}`,
+          name,
+          date: today,
+          duration: Math.max(1, Math.round(duration / 60)),
+          exercises,
+          totalVolume,
+          totalSets,
         };
-        return { ...ex, sets: [...ex.sets, newSet] };
-      }),
-    })),
 
-  removeSet: (exerciseId, setId) =>
-    set((state) => ({
-      exercises: state.exercises.map((ex) =>
-        ex.id === exerciseId
-          ? { ...ex, sets: ex.sets.filter((s) => s.id !== setId) }
-          : ex
-      ),
-    })),
+        set((state) => ({
+          savedWorkouts: [newWorkout, ...state.savedWorkouts],
+          isActive: false,
+        }));
+      },
 
-  addExercise: (exercise) =>
-    set((state) => ({
-      exercises: [
-        ...state.exercises,
-        {
-          id: `ex_${Date.now()}`,
-          exercise,
-          sets: [{ id: `set_${Date.now()}`, reps: 10, weight: 0, done: false }],
-          restTime: 90,
-          notes: '',
-        },
-      ],
-    })),
+      tickTimer: () => set((state) => ({ timerSeconds: state.timerSeconds + 1 })),
 
-  addExerciseFromProgram: (exercise, numSets, reps, restTime, notes = '') =>
-    set((state) => {
-      const ts = Date.now();
-      const rand = Math.random().toString(36).slice(2, 7);
-      return {
-        exercises: [
-          ...state.exercises,
-          {
-            id: `ex_${ts}_${rand}`,
-            exercise,
-            sets: Array.from({ length: numSets }, (_, i) => ({
-              id: `set_${ts}_${rand}_${i}`,
-              reps,
-              weight: 0,
+      toggleSetDone: (exerciseId, setId) =>
+        set((state) => ({
+          exercises: state.exercises.map((ex) =>
+            ex.id === exerciseId
+              ? { ...ex, sets: ex.sets.map((s) => s.id === setId ? { ...s, done: !s.done } : s) }
+              : ex
+          ),
+        })),
+
+      updateSet: (exerciseId, setId, field, value) =>
+        set((state) => ({
+          exercises: state.exercises.map((ex) =>
+            ex.id === exerciseId
+              ? { ...ex, sets: ex.sets.map((s) => s.id === setId ? { ...s, [field]: value } : s) }
+              : ex
+          ),
+        })),
+
+      addSet: (exerciseId) =>
+        set((state) => ({
+          exercises: state.exercises.map((ex) => {
+            if (ex.id !== exerciseId) return ex;
+            const lastSet = ex.sets[ex.sets.length - 1];
+            const newSet: WorkoutSet = {
+              id: `set_${Date.now()}`,
+              reps: lastSet?.reps ?? 10,
+              weight: lastSet?.weight ?? 0,
               done: false,
-            })),
-            restTime,
-            notes,
-          },
-        ],
-      };
+            };
+            return { ...ex, sets: [...ex.sets, newSet] };
+          }),
+        })),
+
+      removeSet: (exerciseId, setId) =>
+        set((state) => ({
+          exercises: state.exercises.map((ex) =>
+            ex.id === exerciseId
+              ? { ...ex, sets: ex.sets.filter((s) => s.id !== setId) }
+              : ex
+          ),
+        })),
+
+      addExercise: (exercise) =>
+        set((state) => ({
+          exercises: [
+            ...state.exercises,
+            {
+              id: `ex_${Date.now()}`,
+              exercise,
+              sets: [{ id: `set_${Date.now()}`, reps: 10, weight: 0, done: false }],
+              restTime: 90,
+              notes: '',
+            },
+          ],
+        })),
+
+      addExerciseFromProgram: (exercise, numSets, reps, restTime, notes = '') =>
+        set((state) => {
+          const ts = Date.now();
+          const rand = Math.random().toString(36).slice(2, 7);
+          return {
+            exercises: [
+              ...state.exercises,
+              {
+                id: `ex_${ts}_${rand}`,
+                exercise,
+                sets: Array.from({ length: numSets }, (_, i) => ({
+                  id: `set_${ts}_${rand}_${i}`,
+                  reps,
+                  weight: 0,
+                  done: false,
+                })),
+                restTime,
+                notes,
+              },
+            ],
+          };
+        }),
+
+      removeExercise: (exerciseId) =>
+        set((state) => ({
+          exercises: state.exercises.filter((ex) => ex.id !== exerciseId),
+        })),
+
+      clearExercises: () => set({ exercises: [] }),
+
+      deleteWorkout: (workoutId) =>
+        set((state) => ({
+          savedWorkouts: state.savedWorkouts.filter((w) => w.id !== workoutId),
+        })),
+
+      updateRestTime: (exerciseId, restTime) =>
+        set((state) => ({
+          exercises: state.exercises.map((ex) =>
+            ex.id === exerciseId ? { ...ex, restTime } : ex
+          ),
+        })),
+
+      updateNotes: (exerciseId, notes) =>
+        set((state) => ({
+          exercises: state.exercises.map((ex) =>
+            ex.id === exerciseId ? { ...ex, notes } : ex
+          ),
+        })),
+
+      startRestTimer: (seconds) =>
+        set({ restTimerActive: true, restTimerSeconds: seconds, restTimerTotal: seconds }),
+
+      tickRestTimer: () =>
+        set((state) => {
+          if (state.restTimerSeconds <= 1) return { restTimerActive: false, restTimerSeconds: 0 };
+          return { restTimerSeconds: state.restTimerSeconds - 1 };
+        }),
+
+      stopRestTimer: () => set({ restTimerActive: false, restTimerSeconds: 0 }),
     }),
-
-  removeExercise: (exerciseId) =>
-    set((state) => ({
-      exercises: state.exercises.filter((ex) => ex.id !== exerciseId),
-    })),
-
-  clearExercises: () => set({ exercises: [] }),
-
-  updateRestTime: (exerciseId, restTime) =>
-    set((state) => ({
-      exercises: state.exercises.map((ex) =>
-        ex.id === exerciseId ? { ...ex, restTime } : ex
-      ),
-    })),
-
-  updateNotes: (exerciseId, notes) =>
-    set((state) => ({
-      exercises: state.exercises.map((ex) =>
-        ex.id === exerciseId ? { ...ex, notes } : ex
-      ),
-    })),
-
-  startRestTimer: (seconds) =>
-    set({ restTimerActive: true, restTimerSeconds: seconds, restTimerTotal: seconds }),
-
-  tickRestTimer: () =>
-    set((state) => {
-      if (state.restTimerSeconds <= 1) return { restTimerActive: false, restTimerSeconds: 0 };
-      return { restTimerSeconds: state.restTimerSeconds - 1 };
-    }),
-
-  stopRestTimer: () => set({ restTimerActive: false, restTimerSeconds: 0 }),
-}));
+    {
+      name: 'workout-store-v2',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        savedWorkouts: state.savedWorkouts,
+      }),
+    }
+  )
+);
 
 // ─── NUTRITION STORE ──────────────────────────────────────────────────────────
 

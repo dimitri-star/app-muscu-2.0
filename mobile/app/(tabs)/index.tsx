@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
 import { useWorkoutStore, useWaterStore, useGamificationStore } from '../../store';
-import { recentWorkouts, weeklyProgram } from '../../constants/mockData';
+import { weeklyProgram } from '../../constants/mockData';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -268,8 +268,12 @@ function WaterCard({
   s: ReturnType<typeof getStyles>;
   colors: ThemeColors;
 }) {
-  const { current, goal, addWater } = useWaterStore();
+  const { current, goal, addWater, checkAndResetDaily } = useWaterStore();
   const pct = Math.min(current / goal, 1);
+
+  useEffect(() => {
+    checkAndResetDaily();
+  }, []);
 
   return (
     <View style={s.waterCard}>
@@ -301,7 +305,8 @@ function LastWorkoutCard({
   s: ReturnType<typeof getStyles>;
   colors: ThemeColors;
 }) {
-  const last = recentWorkouts[0];
+  const { savedWorkouts } = useWorkoutStore();
+  const last = savedWorkouts[0];
   if (!last) return null;
   return (
     <View style={s.lastCard}>

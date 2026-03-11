@@ -14,9 +14,9 @@ import {
 } from "recharts";
 
 const ACCENT = "#1DB954";
-const CARD_BG = "#1A1A2E";
-const BORDER = "#2A2A3E";
-const MUTED = "#8888A0";
+const CARD_BG = "#FFFFFF";
+const BORDER = "#E5E5E5";
+const MUTED = "#888888";
 
 const muscleGroupTabs = ["Tous", "Poitrine", "Dos", "Jambes", "Épaules", "Bras"];
 
@@ -39,7 +39,7 @@ export default function RecordsPage() {
           <Trophy className="w-6 h-6" style={{ color: "#F59E0B" }} />
         </div>
         <div>
-          <h1 className="text-3xl font-bold text-white">Records Personnels (PR)</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Records Personnels (PR)</h1>
           <p style={{ color: MUTED }} className="mt-0.5 text-sm">
             {personalRecords.length} records enregistrés
           </p>
@@ -79,7 +79,7 @@ export default function RecordsPage() {
               value={tab}
               className="text-xs data-[state=active]:text-black"
               style={{
-                color: activeTab === tab ? "#0F0F1A" : MUTED,
+                color: activeTab === tab ? "#1A1A1A" : MUTED,
               }}
             >
               {tab}
@@ -102,7 +102,7 @@ export default function RecordsPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <Trophy className="w-4 h-4" style={{ color: "#F59E0B" }} />
-                      <h3 className="text-base font-bold text-white">{pr.exercise}</h3>
+                      <h3 className="text-base font-bold text-gray-900">{pr.exercise}</h3>
                       <Badge
                         className="text-xs"
                         style={{
@@ -151,11 +151,11 @@ export default function RecordsPage() {
                       <LineChart data={sparkData}>
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: "#12122A",
+                            backgroundColor: "#FFFFFF",
                             border: `1px solid ${BORDER}`,
                             borderRadius: 6,
                             fontSize: 11,
-                            color: "#E8E8F0",
+                            color: "#1A1A1A",
                           }}
                           formatter={(v) => [`${v} kg`]}
                           labelFormatter={() => ""}

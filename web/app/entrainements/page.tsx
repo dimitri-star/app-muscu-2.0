@@ -8,9 +8,9 @@ import { Dumbbell, Clock, Weight, LayoutGrid, List, ChevronDown } from "lucide-r
 import { allWorkouts } from "@/lib/mockData";
 
 const ACCENT = "#1DB954";
-const CARD_BG = "#1A1A2E";
-const BORDER = "#2A2A3E";
-const MUTED = "#8888A0";
+const CARD_BG = "#FFFFFF";
+const BORDER = "#E5E5E5";
+const MUTED = "#888888";
 
 const muscleGroups = ["Tous", "Poitrine", "Dos", "Jambes", "Épaules", "Bras", "Abdos"];
 
@@ -28,13 +28,13 @@ export default function EntrainementsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Entraînements</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Entraînements</h1>
           <p style={{ color: MUTED }} className="mt-1 text-sm">
             {allWorkouts.length} séances enregistrées
           </p>
         </div>
         <Button
-          style={{ backgroundColor: ACCENT, color: "#0F0F1A" }}
+          style={{ backgroundColor: ACCENT, color: "#FFFFFF" }}
           className="font-semibold"
         >
           + Nouvelle séance
@@ -51,8 +51,8 @@ export default function EntrainementsPage() {
               className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
               style={{
                 backgroundColor:
-                  selectedMuscle === mg ? ACCENT : "#2A2A3E",
-                color: selectedMuscle === mg ? "#0F0F1A" : MUTED,
+                  selectedMuscle === mg ? ACCENT : "#E5E5E5",
+                color: selectedMuscle === mg ? "#FFFFFF" : MUTED,
               }}
             >
               {mg}
@@ -67,8 +67,8 @@ export default function EntrainementsPage() {
             onClick={() => setViewMode("cards")}
             className="px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-all"
             style={{
-              backgroundColor: viewMode === "cards" ? "#2A2A3E" : "transparent",
-              color: viewMode === "cards" ? "#E8E8F0" : MUTED,
+              backgroundColor: viewMode === "cards" ? "#E5E5E5" : "transparent",
+              color: viewMode === "cards" ? "#1A1A1A" : MUTED,
             }}
           >
             <LayoutGrid className="w-3.5 h-3.5" /> Cards
@@ -77,8 +77,8 @@ export default function EntrainementsPage() {
             onClick={() => setViewMode("table")}
             className="px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-all"
             style={{
-              backgroundColor: viewMode === "table" ? "#2A2A3E" : "transparent",
-              color: viewMode === "table" ? "#E8E8F0" : MUTED,
+              backgroundColor: viewMode === "table" ? "#E5E5E5" : "transparent",
+              color: viewMode === "table" ? "#1A1A1A" : MUTED,
             }}
           >
             <List className="w-3.5 h-3.5" /> Tableau
@@ -111,35 +111,35 @@ export default function EntrainementsPage() {
                   </Badge>
                 </div>
 
-                <h3 className="text-sm font-bold text-white mb-1">{workout.title}</h3>
+                <h3 className="text-sm font-bold text-gray-900 mb-1">{workout.title}</h3>
 
                 <div className="grid grid-cols-3 gap-2 my-3">
                   <div className="text-center">
                     <div className="flex items-center justify-center gap-1 mb-0.5">
                       <Clock className="w-3 h-3" style={{ color: MUTED }} />
                     </div>
-                    <p className="text-xs font-semibold text-white">{workout.duration}</p>
+                    <p className="text-xs font-semibold text-gray-900">{workout.duration}</p>
                     <p className="text-xs" style={{ color: MUTED }}>durée</p>
                   </div>
                   <div className="text-center">
                     <div className="flex items-center justify-center gap-1 mb-0.5">
                       <Weight className="w-3 h-3" style={{ color: MUTED }} />
                     </div>
-                    <p className="text-xs font-semibold text-white">{workout.volume}</p>
+                    <p className="text-xs font-semibold text-gray-900">{workout.volume}</p>
                     <p className="text-xs" style={{ color: MUTED }}>volume</p>
                   </div>
                   <div className="text-center">
                     <div className="flex items-center justify-center gap-1 mb-0.5">
                       <Dumbbell className="w-3 h-3" style={{ color: MUTED }} />
                     </div>
-                    <p className="text-xs font-semibold text-white">{workout.exerciseCount}</p>
+                    <p className="text-xs font-semibold text-gray-900">{workout.exerciseCount}</p>
                     <p className="text-xs" style={{ color: MUTED }}>exercices</p>
                   </div>
                 </div>
 
                 <div
                   className="rounded-lg p-2.5 space-y-1"
-                  style={{ backgroundColor: "#12122A" }}
+                  style={{ backgroundColor: "#F5F5F5" }}
                 >
                   {workout.topExercises.map((ex, i) => (
                     <p key={i} className="text-xs" style={{ color: MUTED }}>
@@ -174,15 +174,15 @@ export default function EntrainementsPage() {
                 {filtered.map((w, i) => (
                   <tr
                     key={w.id}
-                    className="hover:bg-white/5 transition-colors cursor-pointer"
+                    className="hover:bg-black/5 transition-colors cursor-pointer"
                     style={{
                       borderBottom: i < filtered.length - 1 ? `1px solid ${BORDER}` : "none",
                     }}
                   >
-                    <td className="px-4 py-3 text-sm font-medium text-white">{w.title}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{w.title}</td>
                     <td className="px-4 py-3 text-sm" style={{ color: MUTED }}>{w.date}</td>
                     <td className="px-4 py-3 text-sm" style={{ color: MUTED }}>{w.duration}</td>
-                    <td className="px-4 py-3 text-sm text-white font-medium">{w.volume}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">{w.volume}</td>
                     <td className="px-4 py-3 text-sm" style={{ color: MUTED }}>{w.exerciseCount}</td>
                     <td className="px-4 py-3">
                       <Badge

@@ -16,11 +16,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '../../constants/colors';
 import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
 import { useWorkoutStore, useWaterStore, useProgramStore } from '../../store';
-import { recentWorkouts, weeklyProgram, exercisesDB } from '../../constants/mockData';
+import { weeklyProgram, exercisesDB } from '../../constants/mockData';
 import { PROGRAMME_API } from '../../constants/api';
 import type { WorkoutExercise, Exercise } from '../../constants/mockData';
 import StartWorkoutModal from '../../components/StartWorkoutModal';
@@ -347,8 +346,11 @@ function SeanceContent() {
     restTimerTotal,
     startWorkout,
     endWorkout,
+    saveWorkout,
+    savedWorkouts,
     addExercise,
     clearExercises,
+    deleteWorkout,
     tickTimer,
     tickRestTimer,
     stopRestTimer,
@@ -361,6 +363,7 @@ function SeanceContent() {
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [showExerciseModal, setShowExerciseModal] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [selectedWorkout, setSelectedWorkout] = useState<import('../../constants/mockData').Workout | null>(null);
 
   // Main workout timer
   useEffect(() => {
@@ -436,9 +439,9 @@ function SeanceContent() {
   };
 
   const handleSave = () => {
+    saveWorkout({ name: workoutName, duration: timerSeconds, exercises });
     setShowSaveModal(false);
-    endWorkout();
-    Alert.alert('Seance enregistree', 'Bravo, ta seance a ete enregistree avec succes !');
+    Alert.alert('Séance enregistrée !', 'Bravo, ta séance a été ajoutée à ton historique.');
   };
 
   if (!isActive) {
@@ -454,8 +457,8 @@ function SeanceContent() {
           </TouchableOpacity>
 
           <Text style={activeStyles.sectionTitle}>Dernieres seances</Text>
-          {recentWorkouts.map((w) => (
-            <View key={w.id} style={activeStyles.historyCard}>
+          {savedWorkouts.slice(0, 10).map((w) => (
+            <TouchableOpacity key={w.id} style={activeStyles.historyCard} onPress={() => setSelectedWorkout(w)} activeOpacity={0.75}>
               <Text style={activeStyles.historyDate}>{new Date(w.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</Text>
               <Text style={activeStyles.historyName}>{w.name}</Text>
               <View style={activeStyles.historyMeta}>
@@ -464,10 +467,94 @@ function SeanceContent() {
                 </Text>
                 <Text style={activeStyles.historyMetaSep}>&middot;</Text>
                 <Text style={activeStyles.historyMetaText}>{w.duration} min</Text>
+                <Text style={activeStyles.historyMetaSep}>&middot;</Text>
+                <Text style={activeStyles.historyMetaText}>{w.exercises.length} exercice{w.exercises.length > 1 ? 's' : ''}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
+
+        {/* Workout detail modal */}
+        <Modal visible={selectedWorkout !== null} animationType="slide" transparent onRequestClose={() => setSelectedWorkout(null)}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} onPress={() => setSelectedWorkout(null)}>
+            <Pressable
+              style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, paddingBottom: 32, maxHeight: '85%' }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              {/* Handle */}
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.separator, alignSelf: 'center', marginBottom: 16 }} />
+
+              {selectedWorkout && (
+                <>
+                  {/* Header */}
+                  <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 4 }}>
+                      {new Date(selectedWorkout.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </Text>
+                    <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700', marginBottom: 12 }}>{selectedWorkout.name}</Text>
+                    <View style={{ flexDirection: 'row', gap: 16 }}>
+                      <View style={{ backgroundColor: colors.card, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, alignItems: 'center' }}>
+                        <Text style={{ color: colors.accentOrange, fontSize: 16, fontWeight: '700' }}>{selectedWorkout.duration} min</Text>
+                        <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>Durée</Text>
+                      </View>
+                      <View style={{ backgroundColor: colors.card, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, alignItems: 'center' }}>
+                        <Text style={{ color: colors.accentOrange, fontSize: 16, fontWeight: '700' }}>{(selectedWorkout.totalVolume / 1000).toFixed(1)} t</Text>
+                        <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>Volume</Text>
+                      </View>
+                      <View style={{ backgroundColor: colors.card, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, alignItems: 'center' }}>
+                        <Text style={{ color: colors.accentOrange, fontSize: 16, fontWeight: '700' }}>{selectedWorkout.totalSets ?? selectedWorkout.exercises.reduce((acc, ex) => acc + ex.sets.length, 0)}</Text>
+                        <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>Séries</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Exercises list */}
+                  <ScrollView style={{ paddingHorizontal: 20 }} showsVerticalScrollIndicator={false}>
+                    {selectedWorkout.exercises.map((ex) => (
+                      <View key={ex.id} style={{ marginBottom: 14 }}>
+                        <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', marginBottom: 6 }}>{ex.exercise.name}</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                          {ex.sets.map((s, i) => (
+                            <View key={s.id} style={{ backgroundColor: s.done ? colors.accentOrange + '22' : colors.card, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Text style={{ color: colors.textSecondary, fontSize: 11 }}>S{i + 1}</Text>
+                              <Text style={{ color: s.done ? colors.accentOrange : colors.text, fontSize: 13, fontWeight: '600' }}>
+                                {s.weight > 0 ? `${s.weight} kg × ` : ''}{s.reps} reps
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    ))}
+
+                    {/* Delete button */}
+                    <TouchableOpacity
+                      style={{ marginTop: 8, marginBottom: 8, borderRadius: 12, paddingVertical: 14, backgroundColor: '#FF3B3022', alignItems: 'center' }}
+                      onPress={() => {
+                        Alert.alert(
+                          'Supprimer cette séance ?',
+                          'Elle sera définitivement retirée de ton historique.',
+                          [
+                            { text: 'Annuler', style: 'cancel' },
+                            {
+                              text: 'Supprimer',
+                              style: 'destructive',
+                              onPress: () => {
+                                deleteWorkout(selectedWorkout.id);
+                                setSelectedWorkout(null);
+                              },
+                            },
+                          ]
+                        );
+                      }}
+                    >
+                      <Text style={{ color: '#FF3B30', fontSize: 15, fontWeight: '600' }}>Supprimer cette séance</Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+                </>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         <StartWorkoutModal
           visible={showStartModal}
@@ -493,7 +580,7 @@ function SeanceContent() {
           <Ionicons name="close" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={activeStyles.timerCenter}>
-          <Ionicons name="timer-outline" size={14} color={Colors.accentOrange} />
+          <Ionicons name="timer-outline" size={14} color={colors.accentOrange} />
           <Text style={activeStyles.timer}>{formatTime(timerSeconds)}</Text>
         </View>
         <TouchableOpacity
@@ -975,12 +1062,16 @@ function getWaterStyles(colors: ThemeColors) {
 }
 
 function WaterContent() {
-  const { current, goal, weekHistory, entries, addWater, removeEntry } = useWaterStore();
+  const { current, goal, weekHistory, entries, addWater, removeEntry, checkAndResetDaily } = useWaterStore();
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const waterStyles = useMemo(() => getWaterStyles(colors), [isDark]);
   const [selectedDrink, setSelectedDrink] = useState('eau');
   const [customAmount, setCustomAmount] = useState('');
+
+  useEffect(() => {
+    checkAndResetDaily();
+  }, []);
 
   const pct = Math.min(current / goal, 1);
   const strokeDash = GAUGE_CIRCUMFERENCE * pct;

@@ -6,9 +6,9 @@ import { Bot, Send, Paperclip, User, Loader2, Sparkles } from "lucide-react";
 import { initialMessages } from "@/lib/mockData";
 
 const ACCENT = "#1DB954";
-const CARD_BG = "#1A1A2E";
-const BORDER = "#2A2A3E";
-const MUTED = "#8888A0";
+const CARD_BG = "#FFFFFF";
+const BORDER = "#E5E5E5";
+const MUTED = "#888888";
 
 type Message = {
   role: "user" | "assistant";
@@ -31,22 +31,22 @@ function renderMarkdown(text: string) {
     const body = rows.slice(1);
     return (
       `<table class="w-full text-xs border-collapse my-3">` +
-      `<thead><tr>${headers.map((h) => `<th class="text-left px-2 py-1.5 border-b" style="border-color:#2A2A3E;color:#8888A0">${h}</th>`).join("")}</tr></thead>` +
-      `<tbody>${body.map((row) => `<tr>${row.split("|").filter(Boolean).map((c) => `<td class="px-2 py-1 border-b" style="border-color:#2A2A3E;color:#E8E8F0">${c.trim()}</td>`).join("")}</tr>`).join("")}</tbody>` +
+      `<thead><tr>${headers.map((h) => `<th class="text-left px-2 py-1.5 border-b" style="border-color:#E5E5E5;color:#888888">${h}</th>`).join("")}</tr></thead>` +
+      `<tbody>${body.map((row) => `<tr>${row.split("|").filter(Boolean).map((c) => `<td class="px-2 py-1 border-b" style="border-color:#E5E5E5;color:#1A1A1A">${c.trim()}</td>`).join("")}</tr>`).join("")}</tbody>` +
       `</table>`
     );
   });
   // Bold
-  text = text.replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-white">$1</strong>');
+  text = text.replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-gray-900">$1</strong>');
   // Bullet points
-  text = text.replace(/^- (.+)$/gm, '<li class="ml-4 list-disc" style="color:#E8E8F0">$1</li>');
+  text = text.replace(/^- (.+)$/gm, '<li class="ml-4 list-disc" style="color:#1A1A1A">$1</li>');
   text = text.replace(/(<li.*<\/li>\n?)+/g, '<ul class="space-y-0.5 my-1">$&</ul>');
   // Numbered lists
-  text = text.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal" style="color:#E8E8F0">$1</li>');
+  text = text.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal" style="color:#1A1A1A">$1</li>');
   // Headers
-  text = text.replace(/^### (.+)$/gm, '<h3 class="text-sm font-bold text-white mt-3 mb-1">$1</h3>');
-  text = text.replace(/^## (.+)$/gm, '<h2 class="text-base font-bold text-white mt-4 mb-1.5">$1</h2>');
-  text = text.replace(/^# (.+)$/gm, '<h1 class="text-lg font-bold text-white mt-4 mb-2">$1</h1>');
+  text = text.replace(/^### (.+)$/gm, '<h3 class="text-sm font-bold text-gray-900 mt-3 mb-1">$1</h3>');
+  text = text.replace(/^## (.+)$/gm, '<h2 class="text-base font-bold text-gray-900 mt-4 mb-1.5">$1</h2>');
+  text = text.replace(/^# (.+)$/gm, '<h1 class="text-lg font-bold text-gray-900 mt-4 mb-2">$1</h1>');
   // Line breaks
   text = text.replace(/\n\n/g, '<br/><br/>');
   return text;
@@ -109,7 +109,7 @@ export default function AssistantPage() {
           <Bot className="w-5 h-5" style={{ color: ACCENT }} />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-white">FitTrack AI</h1>
+          <h1 className="text-lg font-bold text-gray-900">FitTrack AI</h1>
           <p className="text-xs flex items-center gap-1" style={{ color: ACCENT }}>
             <span
               className="w-1.5 h-1.5 rounded-full animate-pulse"
@@ -149,9 +149,9 @@ export default function AssistantPage() {
               className="max-w-[75%] rounded-xl px-4 py-3 text-sm leading-relaxed"
               style={{
                 backgroundColor:
-                  msg.role === "assistant" ? CARD_BG : "rgba(76,155,232,0.15)",
+                  msg.role === "assistant" ? "#F5F5F5" : "rgba(76,155,232,0.1)",
                 border: `1px solid ${msg.role === "assistant" ? BORDER : "rgba(76,155,232,0.3)"}`,
-                color: "#E8E8F0",
+                color: "#1A1A1A",
               }}
             >
               {msg.role === "assistant" ? (
@@ -173,7 +173,7 @@ export default function AssistantPage() {
             </div>
             <div
               className="rounded-xl px-4 py-3"
-              style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}
+              style={{ backgroundColor: "#F5F5F5", border: `1px solid ${BORDER}` }}
             >
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" style={{ color: ACCENT }} />
@@ -190,7 +190,7 @@ export default function AssistantPage() {
       {/* Input area */}
       <div
         className="px-6 pb-6 pt-4 border-t flex-shrink-0"
-        style={{ borderColor: BORDER, backgroundColor: "#0F0F1A" }}
+        style={{ borderColor: BORDER, backgroundColor: "#F5F5F5" }}
       >
         {/* Quick actions */}
         <div className="flex gap-2 mb-3 flex-wrap">
@@ -227,7 +227,7 @@ export default function AssistantPage() {
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
             placeholder="Pose une question à ton coach IA..."
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            style={{ color: "#E8E8F0" }}
+            style={{ color: "#1A1A1A" }}
             disabled={loading}
           />
           <Button
@@ -236,8 +236,8 @@ export default function AssistantPage() {
             size="sm"
             className="h-8 px-3"
             style={{
-              backgroundColor: input.trim() && !loading ? ACCENT : "#2A2A3E",
-              color: input.trim() && !loading ? "#0F0F1A" : MUTED,
+              backgroundColor: input.trim() && !loading ? ACCENT : "#E5E5E5",
+              color: input.trim() && !loading ? "#FFFFFF" : MUTED,
             }}
           >
             {loading ? (

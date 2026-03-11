@@ -6,8 +6,10 @@ import {
   TextInput,
   ScrollView,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../store/theme';
 import { getColors } from '../constants/theme';
 
@@ -19,6 +21,7 @@ type ObjectifOption = 'Prise de masse' | 'Seche' | 'Maintien' | 'Force';
 const OBJECTIF_OPTIONS: ObjectifOption[] = ['Prise de masse', 'Seche', 'Maintien', 'Force'];
 
 export default function SettingsScreen({ onBack }: SettingsScreenProps) {
+  const insets = useSafeAreaInsets();
   const isDark = useThemeStore((s) => s.isDark);
   const setLight = useThemeStore((s) => s.setLight);
   const setDark = useThemeStore((s) => s.setDark);
@@ -52,11 +55,20 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.separator }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={onBack}>
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-          <Text style={[styles.backLabel, { color: colors.text }]}>Parametres</Text>
-        </TouchableOpacity>
+      <View style={[styles.header, { borderBottomColor: colors.separator, paddingTop: Math.max(14, insets.top) }]}>
+        <View style={styles.backBtn}>
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.backBtnTouchable}
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 24 }}
+            activeOpacity={0.7}
+            accessibilityLabel="Retour"
+            accessibilityRole="button"
+          >
+            <Ionicons name="chevron-back" size={26} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.backLabel, { color: colors.text }]}>Paramètres</Text>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -264,7 +276,13 @@ const styles = StyleSheet.create({
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 10,
+  },
+  backBtnTouchable: {
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    marginLeft: -8,
   },
   backLabel: {
     fontSize: 18,

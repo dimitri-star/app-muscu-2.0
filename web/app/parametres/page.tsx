@@ -17,9 +17,9 @@ import {
 import { userProfile } from "@/lib/mockData";
 
 const ACCENT = "#1DB954";
-const CARD_BG = "#1A1A2E";
-const BORDER = "#2A2A3E";
-const MUTED = "#8888A0";
+const CARD_BG = "#FFFFFF";
+const BORDER = "#E5E5E5";
+const MUTED = "#888888";
 
 const goals = [
   { key: "masse", label: "Prise de masse", desc: "Surplus calorique, focus volume" },
@@ -53,9 +53,9 @@ function InputField({
           onChange={(e) => onChange(e.target.value)}
           className="flex-1 rounded-lg px-3 py-2.5 text-sm outline-none transition-all focus:ring-1"
           style={{
-            backgroundColor: "#12122A",
+            backgroundColor: "#F5F5F5",
             border: `1px solid ${BORDER}`,
-            color: "#E8E8F0",
+            color: "#1A1A1A",
           }}
           onFocus={(e) => {
             e.target.style.borderColor = ACCENT;
@@ -92,7 +92,7 @@ export default function ParametresPage() {
     <div className="p-8 space-y-6 max-w-3xl">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">Paramètres</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Paramètres</h1>
         <p style={{ color: MUTED }} className="mt-1 text-sm">
           Gérez votre profil et vos objectifs
         </p>
@@ -101,7 +101,7 @@ export default function ParametresPage() {
       {/* Profile */}
       <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+          <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
             <User className="w-4 h-4" style={{ color: ACCENT }} />
             Profil
           </CardTitle>
@@ -139,7 +139,7 @@ export default function ParametresPage() {
       {/* Goals */}
       <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+          <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
             <Target className="w-4 h-4" style={{ color: ACCENT }} />
             Objectif
           </CardTitle>
@@ -152,7 +152,7 @@ export default function ParametresPage() {
                 onClick={() => setGoal(g.key as typeof goal)}
                 className="flex items-center gap-3 p-4 rounded-xl text-left transition-all"
                 style={{
-                  backgroundColor: goal === g.key ? "rgba(29,185,84,0.1)" : "#12122A",
+                  backgroundColor: goal === g.key ? "rgba(29,185,84,0.08)" : "#F5F5F5",
                   border: `1px solid ${goal === g.key ? ACCENT : BORDER}`,
                 }}
               >
@@ -168,7 +168,7 @@ export default function ParametresPage() {
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold" style={{ color: goal === g.key ? ACCENT : "#E8E8F0" }}>
+                  <p className="text-sm font-semibold" style={{ color: goal === g.key ? ACCENT : "#1A1A1A" }}>
                     {g.label}
                   </p>
                   <p className="text-xs" style={{ color: MUTED }}>{g.desc}</p>
@@ -182,7 +182,7 @@ export default function ParametresPage() {
       {/* Macro targets */}
       <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+          <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
             <Utensils className="w-4 h-4" style={{ color: ACCENT }} />
             Objectifs macros journaliers
           </CardTitle>
@@ -207,9 +207,9 @@ export default function ParametresPage() {
                   }
                   className="flex-1 rounded-lg px-3 py-2.5 text-sm outline-none transition-all focus:ring-1"
                   style={{
-                    backgroundColor: "#12122A",
+                    backgroundColor: "#F5F5F5",
                     border: `1px solid ${BORDER}`,
-                    color: "#E8E8F0",
+                    color: "#1A1A1A",
                   }}
                   onFocus={(e) => { e.target.style.borderColor = m.color; }}
                   onBlur={(e) => { e.target.style.borderColor = BORDER; }}
@@ -224,7 +224,7 @@ export default function ParametresPage() {
       {/* Water goal */}
       <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+          <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
             <Droplets className="w-4 h-4" style={{ color: "#4C9BE8" }} />
             Objectif hydratation
           </CardTitle>
@@ -267,7 +267,7 @@ export default function ParametresPage() {
       {/* Measurements */}
       <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+          <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
             <Ruler className="w-4 h-4" style={{ color: "#8B5CF6" }} />
             Mensurations
           </CardTitle>
@@ -295,9 +295,9 @@ export default function ParametresPage() {
                   }
                   className="flex-1 rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
                   style={{
-                    backgroundColor: "#12122A",
+                    backgroundColor: "#F5F5F5",
                     border: `1px solid ${BORDER}`,
-                    color: "#E8E8F0",
+                    color: "#1A1A1A",
                   }}
                   onFocus={(e) => { e.target.style.borderColor = "#8B5CF6"; }}
                   onBlur={(e) => { e.target.style.borderColor = BORDER; }}
@@ -317,8 +317,8 @@ export default function ParametresPage() {
           onClick={handleSave}
           className="flex items-center gap-2 font-semibold px-8"
           style={{
-            backgroundColor: saved ? "rgba(29,185,84,0.2)" : ACCENT,
-            color: saved ? ACCENT : "#0F0F1A",
+            backgroundColor: saved ? "rgba(29,185,84,0.15)" : ACCENT,
+            color: saved ? ACCENT : "#FFFFFF",
             border: saved ? `1px solid ${ACCENT}` : "none",
           }}
         >

@@ -12,9 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
-import { recentWorkouts, personalRecords, userProfile, MARCH_2026_WORKOUT_DAYS } from '../../constants/mockData';
+import { personalRecords, userProfile, MARCH_2026_WORKOUT_DAYS } from '../../constants/mockData';
 import SettingsScreen from '../../components/SettingsScreen';
-import { useGamificationStore } from '../../store';
+import { useGamificationStore, useWorkoutStore } from '../../store';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -123,6 +123,7 @@ function ProfileHeader() {
   const colors = getColors(isDark);
   const headerStyles = useMemo(() => getHeaderStyles(colors), [isDark]);
   const { workoutStreakWeeks, waterStreakDays, totalXp, xpToNextLevel, level } = useGamificationStore();
+  const { savedWorkouts } = useWorkoutStore();
   const xpPct = Math.min(totalXp / xpToNextLevel, 1);
 
   return (
@@ -154,7 +155,7 @@ function ProfileHeader() {
           <Text style={headerStyles.streakLbl}>jours eau</Text>
         </View>
         <View style={headerStyles.streakCard}>
-          <Text style={headerStyles.streakVal}>{userProfile.totalWorkouts}</Text>
+          <Text style={headerStyles.streakVal}>{savedWorkouts.length}</Text>
           <Text style={headerStyles.streakLbl}>séances</Text>
         </View>
       </View>
@@ -191,9 +192,10 @@ function HistoriqueContent() {
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const tabStyles = useMemo(() => getTabStyles(colors), [isDark]);
+  const { savedWorkouts } = useWorkoutStore();
   return (
     <ScrollView contentContainerStyle={tabStyles.container}>
-      {recentWorkouts.map((w) => (
+      {savedWorkouts.map((w) => (
         <TouchableOpacity key={w.id} style={tabStyles.historyCard}>
           <View style={tabStyles.historyLeft}>
             <Text style={tabStyles.historyDate}>
@@ -251,23 +253,48 @@ function StatsContent() {
   const colors = getColors(isDark);
   const tabStyles = useMemo(() => getTabStyles(colors), [isDark]);
   const statsStyles = useMemo(() => getStatsStyles(colors), [isDark]);
+  const { savedWorkouts } = useWorkoutStore();
+
+  const now = new Date();
+  const filtered = useMemo(() => {
+    if (period === 'semaine') {
+      const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return savedWorkouts.filter((w) => new Date(w.date) >= cutoff);
+    }
+    if (period === 'mois') {
+      const cutoff = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+      return savedWorkouts.filter((w) => new Date(w.date) >= cutoff);
+    }
+    if (period === 'annee') {
+      const cutoff = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+      return savedWorkouts.filter((w) => new Date(w.date) >= cutoff);
+    }
+    return savedWorkouts;
+  }, [savedWorkouts, period]);
+
+  const totalVolume = filtered.reduce((acc, w) => acc + w.totalVolume, 0);
+  const totalDuration = filtered.reduce((acc, w) => acc + w.duration, 0);
+  const avgDuration = filtered.length > 0 ? Math.round(totalDuration / filtered.length) : 0;
+  const volumeDisplay = totalVolume >= 1000 ? `${Math.round(totalVolume / 1000)} k` : String(Math.round(totalVolume));
+
+  // Workouts in last 7 days by weekday (Mon=0 … Sun=6)
+  const last7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const recentFiltered = savedWorkouts.filter((w) => new Date(w.date) >= last7);
+  const WEEKLY_DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  const WEEKLY = WEEKLY_DAYS.map((day, i) => {
+    const jsDay = i === 6 ? 0 : i + 1;
+    const dayWorkouts = recentFiltered.filter((w) => new Date(w.date).getDay() === jsDay);
+    const totalMin = dayWorkouts.reduce((acc, w) => acc + w.duration, 0);
+    return { day, val: totalMin };
+  });
+  const maxVal = Math.max(...WEEKLY.map((d) => d.val), 1);
 
   const STAT_CARDS = [
-    { label: 'Total séances', value: '156', sub: 'séances' },
-    { label: 'Volume 7j', value: '47 k', sub: 'kg' },
-    { label: 'Durée moy.', value: '73', sub: 'min' },
-    { label: 'Séances / sem.', value: '4-5', sub: 'cette semaine' },
+    { label: 'Total séances', value: String(filtered.length), sub: 'séances' },
+    { label: 'Volume total', value: volumeDisplay, sub: 'kg' },
+    { label: 'Durée moy.', value: String(avgDuration), sub: 'min' },
+    { label: 'Séances / sem.', value: String(recentFiltered.length), sub: '7 derniers jours' },
   ];
-  const WEEKLY = [
-    { day: 'L', val: 78 },
-    { day: 'M', val: 62 },
-    { day: 'M', val: 68 },
-    { day: 'J', val: 85 },
-    { day: 'V', val: 0 },
-    { day: 'S', val: 72 },
-    { day: 'D', val: 0 },
-  ];
-  const maxVal = Math.max(...WEEKLY.map((d) => d.val), 1);
 
   return (
     <ScrollView contentContainerStyle={tabStyles.container}>
