@@ -15,6 +15,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { todayMacros, meals, weeklyMacros, recipes, nutritionPlan } from "@/lib/mockData";
+import { useUserStore } from "@/lib/userStore";
 
 const ACCENT = "#1DB954";
 const CARD_BG = "#FFFFFF";
@@ -139,7 +140,16 @@ function MealAccordion({
 }
 
 export default function NutritionPage() {
+  const { profile } = useUserStore();
   const [activeRecipeFilter, setActiveRecipeFilter] = useState("Tous");
+
+  // Override macro targets with values from user settings
+  const macroTargets = {
+    calories: { current: todayMacros.calories.current, target: profile.macros.kcal },
+    protein: { current: todayMacros.protein.current, target: profile.macros.protein },
+    carbs: { current: todayMacros.carbs.current, target: profile.macros.carbs },
+    fat: { current: todayMacros.fat.current, target: profile.macros.fat },
+  };
 
   const allTags = ["Tous", "Protéiné", "Low-carb", "Rapide"];
   const filteredRecipes =
@@ -189,29 +199,29 @@ export default function NutritionPage() {
                         stroke="#EF4444"
                         strokeWidth="8"
                         strokeDasharray={`${2 * Math.PI * 32}`}
-                        strokeDashoffset={`${2 * Math.PI * 32 * (1 - todayMacros.calories.current / todayMacros.calories.target)}`}
+                        strokeDashoffset={`${2 * Math.PI * 32 * (1 - macroTargets.calories.current / macroTargets.calories.target)}`}
                         strokeLinecap="round"
                       />
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-base font-black text-gray-900">{todayMacros.calories.current}</span>
+                      <span className="text-base font-black text-gray-900">{macroTargets.calories.current}</span>
                       <span className="text-xs" style={{ color: MUTED }}>kcal</span>
                     </div>
                   </div>
                   <p className="text-xs" style={{ color: MUTED }}>
-                    / {todayMacros.calories.target} kcal
+                    / {macroTargets.calories.target} kcal
                   </p>
                 </div>
-                <MacroRing label="Protéines" current={todayMacros.protein.current} target={todayMacros.protein.target} unit="g" color={macroColors.Protéines} />
-                <MacroRing label="Glucides" current={todayMacros.carbs.current} target={todayMacros.carbs.target} unit="g" color={macroColors.Glucides} />
-                <MacroRing label="Lipides" current={todayMacros.fat.current} target={todayMacros.fat.target} unit="g" color={macroColors.Lipides} />
+                <MacroRing label="Protéines" current={macroTargets.protein.current} target={macroTargets.protein.target} unit="g" color={macroColors.Protéines} />
+                <MacroRing label="Glucides" current={macroTargets.carbs.current} target={macroTargets.carbs.target} unit="g" color={macroColors.Glucides} />
+                <MacroRing label="Lipides" current={macroTargets.fat.current} target={macroTargets.fat.target} unit="g" color={macroColors.Lipides} />
               </div>
 
               <div className="mt-4 space-y-2">
                 {[
-                  { label: "Protéines", current: todayMacros.protein.current, target: todayMacros.protein.target, color: macroColors.Protéines },
-                  { label: "Glucides", current: todayMacros.carbs.current, target: todayMacros.carbs.target, color: macroColors.Glucides },
-                  { label: "Lipides", current: todayMacros.fat.current, target: todayMacros.fat.target, color: macroColors.Lipides },
+                  { label: "Protéines", current: macroTargets.protein.current, target: macroTargets.protein.target, color: macroColors.Protéines },
+                  { label: "Glucides", current: macroTargets.carbs.current, target: macroTargets.carbs.target, color: macroColors.Glucides },
+                  { label: "Lipides", current: macroTargets.fat.current, target: macroTargets.fat.target, color: macroColors.Lipides },
                 ].map((m) => (
                   <div key={m.label}>
                     <div className="flex justify-between text-xs mb-1">

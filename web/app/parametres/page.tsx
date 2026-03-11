@@ -14,7 +14,7 @@ import {
   Save,
   CheckCircle,
 } from "lucide-react";
-import { userProfile } from "@/lib/mockData";
+import { useUserStore } from "@/lib/userStore";
 
 const ACCENT = "#1DB954";
 const CARD_BG = "#FFFFFF";
@@ -71,19 +71,31 @@ function InputField({
 }
 
 export default function ParametresPage() {
+  const { profile: stored, setProfile: saveToStore } = useUserStore();
+
   const [profile, setProfile] = useState({
-    name: userProfile.name,
-    age: String(userProfile.age),
-    height: String(userProfile.height),
-    weight: String(userProfile.weight),
+    name: stored.name,
+    age: String(stored.age),
+    height: String(stored.height),
+    weight: String(stored.weight),
   });
-  const [goal, setGoal] = useState(userProfile.goal);
-  const [macros, setMacros] = useState(userProfile.macros);
-  const [water, setWater] = useState(userProfile.waterGoal);
-  const [measurements, setMeasurements] = useState(userProfile.measurements);
+  const [goal, setGoal] = useState(stored.goal);
+  const [macros, setMacros] = useState(stored.macros);
+  const [water, setWater] = useState(stored.waterGoal);
+  const [measurements, setMeasurements] = useState(stored.measurements);
   const [saved, setSaved] = useState(false);
 
   function handleSave() {
+    saveToStore({
+      name: profile.name,
+      age: Number(profile.age),
+      height: Number(profile.height),
+      weight: Number(profile.weight),
+      goal,
+      macros,
+      waterGoal: water,
+      measurements,
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
