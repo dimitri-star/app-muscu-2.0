@@ -14,12 +14,14 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../store/theme';
 import { getColors } from '../constants/theme';
+import { useWorkoutStore } from '../store';
 
 interface ExerciseItem {
   id: string;
   name: string;
   muscle: string;
   equipment: string;
+  isCustom?: true;
 }
 
 const DEFAULT_EXERCISES: ExerciseItem[] = [
@@ -80,13 +82,12 @@ export default function ExerciseSearchModal({
 }: ExerciseSearchModalProps) {
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
+  const customExercises = useWorkoutStore((s) => s.customExercises);
+  const addCustomExercise = useWorkoutStore((s) => s.addCustomExercise);
 
   // Search state
   const [searchText, setSearchText] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState('Tous');
-
-  // Custom exercises added this session
-  const [customExercises, setCustomExercises] = useState<ExerciseItem[]>([]);
 
   // Create mode
   const [showCreate, setShowCreate] = useState(false);
@@ -120,8 +121,9 @@ export default function ExerciseSearchModal({
       name: createName.trim(),
       muscle: createMuscle,
       equipment: createEquipment,
+      isCustom: true,
     };
-    setCustomExercises((prev) => [...prev, newEx]);
+    addCustomExercise(newEx);
     onSelect(newEx);
     onClose();
     // reset form
@@ -146,7 +148,14 @@ export default function ExerciseSearchModal({
         <Ionicons name="barbell-outline" size={20} color={colors.textSecondary} />
       </View>
       <View style={styles.exerciseInfo}>
-        <Text style={[styles.exerciseName, { color: colors.text }]}>{item.name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+          <Text style={[styles.exerciseName, { color: colors.text }]}>{item.name}</Text>
+          {item.isCustom && (
+            <View style={{ backgroundColor: colors.accent + '25', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+              <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '700' }}>Custom</Text>
+            </View>
+          )}
+        </View>
         <Text style={[styles.exerciseMuscle, { color: colors.textSecondary }]}>
           {item.muscle} · {item.equipment}
         </Text>

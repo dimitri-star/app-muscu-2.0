@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo, useReducer } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
   View,
@@ -18,7 +18,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
-import { useWorkoutStore, useWaterStore, useProgramStore } from '../../store';
+import { useWorkoutStore, useWaterStore, useProgramStore, useGamificationStore } from '../../store';
 import { weeklyProgram, exercisesDB } from '../../constants/mockData';
 import { PROGRAMME_API } from '../../constants/api';
 import type { WorkoutExercise, Exercise } from '../../constants/mockData';
@@ -332,6 +332,26 @@ function getActiveStyles(colors: ThemeColors) {
   });
 }
 
+// ─── Helpers for mini calendar ────────────────────────────────────────────────
+
+function getWeekDays(): Date[] {
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+const WEEK_DAY_LABELS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+function toDateStr(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
 function SeanceContent() {
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
@@ -339,7 +359,7 @@ function SeanceContent() {
   const seanceStyles = useMemo(() => getSeanceStyles(colors), [isDark]);
   const {
     isActive,
-    timerSeconds,
+    workoutStartTime,
     workoutName,
     exercises,
     restTimerActive,
@@ -352,11 +372,14 @@ function SeanceContent() {
     addExercise,
     clearExercises,
     deleteWorkout,
-    tickTimer,
     tickRestTimer,
     stopRestTimer,
   } = useWorkoutStore();
 
+  const { workoutStreakWeeks, workoutStreakTarget, workoutsThisWeek, setStreakTarget } = useGamificationStore();
+  const [showObjectivesInStreak, setShowObjectivesInStreak] = useState(false);
+
+  const [, forceUpdate] = useReducer((x) => x + 1, 0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -365,11 +388,17 @@ function SeanceContent() {
   const [showExerciseModal, setShowExerciseModal] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [selectedWorkout, setSelectedWorkout] = useState<import('../../constants/mockData').Workout | null>(null);
+  const [showStreakModal, setShowStreakModal] = useState(false);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; });
 
-  // Main workout timer
+  // Elapsed seconds computed from startTime (persists across navigation)
+  const elapsedSeconds = workoutStartTime ? Math.floor((Date.now() - workoutStartTime) / 1000) : 0;
+
+  // Main workout timer — just force re-render every second
   useEffect(() => {
     if (isActive) {
-      timerRef.current = setInterval(() => tickTimer(), 1000);
+      timerRef.current = setInterval(() => forceUpdate(), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -440,40 +469,215 @@ function SeanceContent() {
   };
 
   const handleSave = () => {
-    saveWorkout({ name: workoutName, duration: timerSeconds, exercises });
+    saveWorkout({ name: workoutName, duration: elapsedSeconds, exercises });
     setShowSaveModal(false);
     Alert.alert('Séance enregistrée !', 'Bravo, ta séance a été ajoutée à ton historique.');
   };
 
   if (!isActive) {
+    const today = new Date();
+    const todayStr = toDateStr(today);
+    const weekDays = getWeekDays();
+    const workoutDateSet = new Set(savedWorkouts.map((w) => w.date));
+    const remaining = Math.max(0, workoutStreakTarget - workoutsThisWeek);
+    const motivMsg =
+      workoutsThisWeek >= workoutStreakTarget
+        ? 'Bravo ! Objectif de la semaine atteint ! 🎉'
+        : remaining === 1
+        ? "Plus qu'un entraînement pour maintenir ton streak !"
+        : `${remaining} entraînements restants cette semaine`;
+
     return (
       <>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={activeStyles.idleContainer}>
-          <Text style={activeStyles.idleTitle}>Seance</Text>
-          <TouchableOpacity
-            style={activeStyles.ctaBtn}
-            onPress={() => setShowStartModal(true)}
-          >
-            <Text style={activeStyles.ctaBtnText}>Commencer une seance</Text>
-          </TouchableOpacity>
-
-          <Text style={activeStyles.sectionTitle}>Dernieres seances</Text>
-          {savedWorkouts.slice(0, 10).map((w) => (
-            <TouchableOpacity key={w.id} style={activeStyles.historyCard} onPress={() => setSelectedWorkout(w)} activeOpacity={0.75}>
-              <Text style={activeStyles.historyDate}>{new Date(w.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</Text>
-              <Text style={activeStyles.historyName}>{w.name}</Text>
-              <View style={activeStyles.historyMeta}>
-                <Text style={activeStyles.historyMetaText}>
-                  {(w.totalVolume / 1000).toFixed(1)} t
-                </Text>
-                <Text style={activeStyles.historyMetaSep}>&middot;</Text>
-                <Text style={activeStyles.historyMetaText}>{w.duration} min</Text>
-                <Text style={activeStyles.historyMetaSep}>&middot;</Text>
-                <Text style={activeStyles.historyMetaText}>{w.exercises.length} exercice{w.exercises.length > 1 ? 's' : ''}</Text>
-              </View>
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          {/* ── Header ── */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 }}>
+            <TouchableOpacity onPress={() => setShowStreakModal(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={{ fontSize: 22 }}>🔥</Text>
+              <Text style={{ color: '#FF6B35', fontSize: 15, fontWeight: '800' }}>{workoutStreakWeeks}</Text>
             </TouchableOpacity>
-          ))}
+            <Text style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>Entraînements</Text>
+            <TouchableOpacity onPress={() => setShowCalendarModal(true)}>
+              <Ionicons name="calendar-outline" size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Mini calendar ── */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 16, gap: 4 }}
+          >
+            {weekDays.map((day, i) => {
+              const dStr = toDateStr(day);
+              const isToday = dStr === todayStr;
+              const hasWorkout = workoutDateSet.has(dStr);
+              return (
+                <View key={i} style={{ alignItems: 'center', width: 44, gap: 4 }}>
+                  <Text style={{ color: colors.textTertiary, fontSize: 11, fontWeight: '600' }}>
+                    {WEEK_DAY_LABELS[i]}
+                  </Text>
+                  <View style={{
+                    width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: isToday ? '#FF3B30' : 'transparent',
+                  }}>
+                    <Text style={{
+                      fontSize: 14, fontWeight: isToday ? '800' : '500',
+                      color: isToday ? '#FFFFFF' : colors.text,
+                    }}>
+                      {day.getDate()}
+                    </Text>
+                  </View>
+                  <View style={{
+                    width: 6, height: 6, borderRadius: 3,
+                    backgroundColor: hasWorkout ? colors.accent : 'transparent',
+                  }} />
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          {/* ── Motivational + CTA ── */}
+          <View style={{ paddingHorizontal: 16, paddingBottom: 20 }}>
+            <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 14 }}>
+              {motivMsg}
+            </Text>
+            <TouchableOpacity
+              style={{ backgroundColor: '#FFFFFF', borderRadius: 12, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              onPress={() => setShowStartModal(true)}
+            >
+              <Ionicons name="play" size={16} color="#000000" />
+              <Text style={{ color: '#000000', fontSize: 16, fontWeight: '700' }}>Commencer un entraînement</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Entraînements précédents ── */}
+          {savedWorkouts.length > 0 && (
+            <View style={{ paddingHorizontal: 16, paddingBottom: 32 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>Entraînements précédents</Text>
+                <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '600' }}>Voir tout</Text>
+              </View>
+              {savedWorkouts.slice(0, 5).map((w) => {
+                const totalSets = w.totalSets ?? w.exercises.reduce((acc, ex) => acc + ex.sets.length, 0);
+                return (
+                  <TouchableOpacity
+                    key={w.id}
+                    style={{ backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center' }}
+                    onPress={() => setSelectedWorkout(w)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 3 }}>
+                        {w.name}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>
+                        {w.exercises.length} exercice{w.exercises.length !== 1 ? 's' : ''} · {totalSets} série{totalSets !== 1 ? 's' : ''} · {w.duration} min
+                      </Text>
+                      {w.tags && w.tags.length > 0 && (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                          {w.tags.map((tag) => (
+                            <View key={tag} style={{ backgroundColor: colors.cardAlt, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                              <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '500' }}>{tag}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                      <Text style={{ color: colors.textTertiary, fontSize: 11, marginTop: 6 }}>
+                        {new Date(w.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      </Text>
+                    </View>
+                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.cardAlt, alignItems: 'center', justifyContent: 'center', marginLeft: 10 }}>
+                      <Ionicons name="play" size={16} color={colors.text} />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {savedWorkouts.length === 0 && (
+            <View style={{ alignItems: 'center', paddingTop: 40, paddingHorizontal: 32 }}>
+              <Ionicons name="barbell-outline" size={56} color={colors.textTertiary} />
+              <Text style={{ color: colors.textSecondary, fontSize: 15, textAlign: 'center', marginTop: 12 }}>
+                Aucune séance enregistrée.{'\n'}Lance ton premier entraînement !
+              </Text>
+            </View>
+          )}
         </ScrollView>
+
+        {/* ── Streak Modal ── */}
+        <Modal visible={showStreakModal} animationType="slide" transparent onRequestClose={() => setShowStreakModal(false)}>
+          <TouchableOpacity
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
+            activeOpacity={1}
+            onPress={() => setShowStreakModal(false)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={{ backgroundColor: '#E8511A', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 28, paddingTop: 16, paddingBottom: 48 }}
+              onPress={() => {}}
+            >
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)', alignSelf: 'center', marginBottom: 20 }} />
+              <TouchableOpacity onPress={() => setShowStreakModal(false)} style={{ position: 'absolute', top: 20, right: 24 }}>
+                <Ionicons name="close" size={24} color="rgba(255,255,255,0.75)" />
+              </TouchableOpacity>
+              <Text style={{ fontSize: 72, textAlign: 'center', marginBottom: 4 }}>🔥</Text>
+              <Text style={{ fontSize: 72, fontWeight: '900', color: '#FFFFFF', textAlign: 'center', lineHeight: 72 }}>{workoutStreakWeeks}</Text>
+              <Text style={{ fontSize: 20, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginBottom: 32, fontWeight: '600' }}>
+                semaine{workoutStreakWeeks > 1 ? 's' : ''} de streak
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 24 }}>
+                {Array.from({ length: workoutStreakTarget }).map((_, i) => (
+                  <View key={i} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: i < workoutsThisWeek ? '#FFFFFF' : 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' }}>
+                    {i < workoutsThisWeek && <Ionicons name="checkmark" size={20} color="#E8511A" />}
+                  </View>
+                ))}
+              </View>
+              <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginBottom: 4 }}>
+                {workoutsThisWeek}/{workoutStreakTarget} séances cette semaine
+              </Text>
+              <Text style={{ fontSize: 16, color: '#FFFFFF', textAlign: 'center', marginBottom: 28, marginTop: 8, fontWeight: '600' }}>
+                {remaining === 0 ? 'Bravo ! Streak maintenu cette semaine ! 🎉' : `Plus que ${remaining} entraînement${remaining > 1 ? 's' : ''} pour maintenir ton streak !`}
+              </Text>
+              {!showObjectivesInStreak ? (
+                <TouchableOpacity
+                  style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 14, paddingVertical: 15, alignItems: 'center' }}
+                  onPress={() => setShowObjectivesInStreak(true)}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700' }}>Mes objectifs</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 14, padding: 16 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700', textAlign: 'center', marginBottom: 14 }}>
+                    Séances par semaine
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', marginBottom: 14 }}>
+                    {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                      <TouchableOpacity
+                        key={n}
+                        style={{
+                          width: 42, height: 42, borderRadius: 21,
+                          backgroundColor: n === workoutStreakTarget ? '#FFFFFF' : 'rgba(255,255,255,0.25)',
+                          alignItems: 'center', justifyContent: 'center',
+                        }}
+                        onPress={() => { setStreakTarget(n); setShowObjectivesInStreak(false); }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={{ color: n === workoutStreakTarget ? '#E8511A' : '#FFFFFF', fontSize: 16, fontWeight: '800' }}>
+                          {n}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <TouchableOpacity onPress={() => setShowObjectivesInStreak(false)} style={{ alignItems: 'center', paddingVertical: 6 }}>
+                    <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Annuler</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
 
         {/* Workout detail modal */}
         <Modal visible={selectedWorkout !== null} animationType="slide" transparent onRequestClose={() => setSelectedWorkout(null)}>
@@ -569,6 +773,119 @@ function SeanceContent() {
           onClose={() => setShowDayPicker(false)}
           onSelectDay={handleSelectDay}
         />
+
+        {/* ── Calendar Modal ── */}
+        <Modal visible={showCalendarModal} animationType="slide" transparent onRequestClose={() => setShowCalendarModal(false)}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setShowCalendarModal(false)}>
+            <Pressable
+              style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 36, maxHeight: '88%' }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              {/* Handle */}
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.separator, alignSelf: 'center', marginBottom: 16 }} />
+
+              {/* Month nav */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 }}>
+                <TouchableOpacity
+                  onPress={() => setCalendarMonth((m) => {
+                    const d = new Date(m.year, m.month - 1, 1);
+                    return { year: d.getFullYear(), month: d.getMonth() };
+                  })}
+                  style={{ padding: 8 }}
+                >
+                  <Ionicons name="chevron-back" size={22} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>
+                  {new Date(calendarMonth.year, calendarMonth.month, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setCalendarMonth((m) => {
+                    const d = new Date(m.year, m.month + 1, 1);
+                    return { year: d.getFullYear(), month: d.getMonth() };
+                  })}
+                  style={{ padding: 8 }}
+                >
+                  <Ionicons name="chevron-forward" size={22} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Day headers */}
+              <View style={{ flexDirection: 'row', paddingHorizontal: 12, marginBottom: 8 }}>
+                {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
+                  <View key={i} style={{ flex: 1, alignItems: 'center' }}>
+                    <Text style={{ color: colors.textTertiary, fontSize: 12, fontWeight: '600' }}>{d}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Calendar grid */}
+              {(() => {
+                const workoutDates = new Set(savedWorkouts.map((w) => w.date));
+                const today = toDateStr(new Date());
+                const firstDay = new Date(calendarMonth.year, calendarMonth.month, 1);
+                // Monday-based offset: getDay() returns 0=Sun, convert to Mon=0
+                const startOffset = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+                const daysInMonth = new Date(calendarMonth.year, calendarMonth.month + 1, 0).getDate();
+                const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+                const weeks: (number | null)[][] = [];
+                for (let i = 0; i < totalCells; i += 7) {
+                  weeks.push(Array.from({ length: 7 }, (_, j) => {
+                    const dayNum = i + j + 1 - startOffset;
+                    return dayNum >= 1 && dayNum <= daysInMonth ? dayNum : null;
+                  }));
+                }
+                return (
+                  <View style={{ paddingHorizontal: 12 }}>
+                    {weeks.map((week, wi) => (
+                      <View key={wi} style={{ flexDirection: 'row', marginBottom: 4 }}>
+                        {week.map((dayNum, di) => {
+                          if (!dayNum) return <View key={di} style={{ flex: 1, height: 44 }} />;
+                          const dStr = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                          const isToday = dStr === today;
+                          const hasWorkout = workoutDates.has(dStr);
+                          const matchingWorkout = savedWorkouts.find((w) => w.date === dStr);
+                          return (
+                            <TouchableOpacity
+                              key={di}
+                              style={{ flex: 1, height: 44, alignItems: 'center', justifyContent: 'center' }}
+                              activeOpacity={hasWorkout ? 0.7 : 1}
+                              onPress={() => { if (matchingWorkout) setSelectedWorkout(matchingWorkout); }}
+                            >
+                              <View style={{
+                                width: 36, height: 36, borderRadius: 18,
+                                backgroundColor: isToday ? '#FF3B30' : hasWorkout ? colors.accent + '33' : 'transparent',
+                                alignItems: 'center', justifyContent: 'center',
+                                borderWidth: hasWorkout && !isToday ? 1.5 : 0,
+                                borderColor: hasWorkout && !isToday ? colors.accent : 'transparent',
+                              }}>
+                                <Text style={{
+                                  fontSize: 14,
+                                  fontWeight: isToday || hasWorkout ? '700' : '400',
+                                  color: isToday ? '#FFFFFF' : hasWorkout ? colors.accent : colors.text,
+                                }}>
+                                  {dayNum}
+                                </Text>
+                              </View>
+                              {hasWorkout && (
+                                <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.accent, position: 'absolute', bottom: 3 }} />
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
+
+              {/* Legend */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, marginTop: 16 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent }} />
+                <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Séance enregistrée — appuie pour voir les détails</Text>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </>
     );
   }
@@ -582,7 +899,7 @@ function SeanceContent() {
         </TouchableOpacity>
         <View style={activeStyles.timerCenter}>
           <Ionicons name="timer-outline" size={14} color={colors.accentOrange} />
-          <Text style={activeStyles.timer}>{formatTime(timerSeconds)}</Text>
+          <Text style={activeStyles.timer}>{formatTime(elapsedSeconds)}</Text>
         </View>
         <TouchableOpacity
           style={activeStyles.roundBtn}
@@ -642,9 +959,9 @@ function SeanceContent() {
         onSave={handleSave}
         workoutData={{
           name: workoutName,
-          duration: timerSeconds,
+          duration: elapsedSeconds,
           exercises,
-          startTime: new Date().toISOString(),
+          startTime: workoutStartTime ? new Date(workoutStartTime).toISOString() : new Date().toISOString(),
         }}
       />
     </View>

@@ -119,15 +119,24 @@ export const useWaterStore = create<WaterState>()(
 
 // ─── WORKOUT STORE ────────────────────────────────────────────────────────────
 
+export interface CustomExercise {
+  id: string;
+  name: string;
+  muscle: string;
+  equipment: string;
+  isCustom?: true;
+}
+
 interface WorkoutState {
   isActive: boolean;
-  timerSeconds: number;
+  workoutStartTime: number | null;
   workoutName: string;
   exercises: WorkoutExercise[];
   restTimerActive: boolean;
   restTimerSeconds: number;
   restTimerTotal: number;
   savedWorkouts: Workout[];
+  customExercises: CustomExercise[];
   startWorkout: () => void;
   endWorkout: () => void;
   saveWorkout: (data: { name: string; duration: number; exercises: WorkoutExercise[] }) => void;
@@ -146,22 +155,24 @@ interface WorkoutState {
   startRestTimer: (seconds: number) => void;
   tickRestTimer: () => void;
   stopRestTimer: () => void;
+  addCustomExercise: (ex: CustomExercise) => void;
 }
 
 export const useWorkoutStore = create<WorkoutState>()(
   persist(
     (set, get) => ({
       isActive: false,
-      timerSeconds: 0,
-      workoutName: 'Mar — Dips Volume & Épaules',
-      exercises: todayWorkout,
+      workoutStartTime: null,
+      workoutName: 'Séance',
+      exercises: [],
       restTimerActive: false,
       restTimerSeconds: 90,
       restTimerTotal: 90,
       savedWorkouts: [],
+      customExercises: [],
 
-      startWorkout: () => set({ isActive: true, timerSeconds: 0 }),
-      endWorkout: () => set({ isActive: false }),
+      startWorkout: () => set({ isActive: true, workoutStartTime: Date.now() }),
+      endWorkout: () => set({ isActive: false, workoutStartTime: null }),
 
       saveWorkout: ({ name, duration, exercises }) => {
         let totalVolume = 0;
@@ -189,10 +200,12 @@ export const useWorkoutStore = create<WorkoutState>()(
         set((state) => ({
           savedWorkouts: [newWorkout, ...state.savedWorkouts],
           isActive: false,
+          workoutStartTime: null,
         }));
       },
 
-      tickTimer: () => set((state) => ({ timerSeconds: state.timerSeconds + 1 })),
+      tickTimer: () => {},
+      addCustomExercise: (ex) => set((state) => ({ customExercises: [...state.customExercises, ex] })),
 
       toggleSetDone: (exerciseId, setId) =>
         set((state) => ({
@@ -315,6 +328,11 @@ export const useWorkoutStore = create<WorkoutState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         savedWorkouts: state.savedWorkouts,
+        customExercises: state.customExercises,
+        isActive: state.isActive,
+        workoutStartTime: state.workoutStartTime,
+        workoutName: state.workoutName,
+        exercises: state.exercises,
       }),
     }
   )
@@ -354,15 +372,27 @@ const calcMacros = (meals: MealEntry[]): MacroTotals =>
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
-export const useNutritionStore = create<NutritionState>((set, get) => ({
-  meals: todayMeals,
-  goals: DAILY_GOALS,
+export const useNutritionStore = create<NutritionState>()(
+  persist(
+    (set, get) => ({
+      meals: todayMeals,
+      goals: DAILY_GOALS,
 
-  getTotals: () => calcMacros(get().meals),
-  getMealTotals: (mealType) => calcMacros(get().meals.filter((m) => m.mealType === mealType)),
-  addMeal: (meal) => set((state) => ({ meals: [...state.meals, meal] })),
-  removeMeal: (id) => set((state) => ({ meals: state.meals.filter((m) => m.id !== id) })),
-}));
+      getTotals: () => calcMacros(get().meals),
+      getMealTotals: (mealType) => calcMacros(get().meals.filter((m) => m.mealType === mealType)),
+      addMeal: (meal) => set((state) => ({ meals: [...state.meals, meal] })),
+      removeMeal: (id) => set((state) => ({ meals: state.meals.filter((m) => m.id !== id) })),
+    }),
+    {
+      name: 'nutrition-store-v1',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        meals: state.meals,
+        goals: state.goals,
+      }),
+    }
+  )
+);
 
 // ─── PROGRAMME STORE ───────────────────────────────────────────────────────────
 
@@ -457,6 +487,7 @@ interface GamificationState {
   addXp: (amount: number) => void;
   completeWaterGoal: () => void;
   completeWorkout: () => void;
+  setStreakTarget: (n: number) => void;
 }
 
 const XP_LEVELS = [
@@ -491,58 +522,80 @@ const INITIAL_BADGES: Badge[] = [
 
 const { level: INIT_LEVEL, xpToNextLevel: INIT_NEXT } = computeLevel(0);
 
-export const useGamificationStore = create<GamificationState>((set, get) => ({
-  workoutStreakWeeks: 0,
-  workoutStreakTarget: 5,
-  workoutsThisWeek: 0,
-  workoutStreakDays: 0,
-  lastWorkoutDate: null,
-  waterStreakDays: 0,
-  totalXp: 0,
-  level: INIT_LEVEL,
-  xpToNextLevel: INIT_NEXT,
-  badges: INITIAL_BADGES,
+export const useGamificationStore = create<GamificationState>()(
+  persist(
+    (set, get) => ({
+      workoutStreakWeeks: 0,
+      workoutStreakTarget: 5,
+      workoutsThisWeek: 0,
+      workoutStreakDays: 0,
+      lastWorkoutDate: null,
+      waterStreakDays: 0,
+      totalXp: 0,
+      level: INIT_LEVEL,
+      xpToNextLevel: INIT_NEXT,
+      badges: INITIAL_BADGES,
 
-  addXp: (amount) =>
-    set((state) => {
-      const xp = state.totalXp + amount;
-      const { level, xpToNextLevel } = computeLevel(xp);
-      return { totalXp: xp, level, xpToNextLevel };
+      addXp: (amount) =>
+        set((state) => {
+          const xp = state.totalXp + amount;
+          const { level, xpToNextLevel } = computeLevel(xp);
+          return { totalXp: xp, level, xpToNextLevel };
+        }),
+
+      completeWaterGoal: () =>
+        set((state) => {
+          const xp = state.totalXp + 10;
+          const { level, xpToNextLevel } = computeLevel(xp);
+          return { waterStreakDays: state.waterStreakDays + 1, totalXp: xp, level, xpToNextLevel };
+        }),
+
+      completeWorkout: () =>
+        set((state) => {
+          const today = getTodayStr();
+          const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+          const isNewDay = state.lastWorkoutDate !== today;
+          const streakContinues = state.lastWorkoutDate === yesterday || state.lastWorkoutDate === today;
+          const workoutStreakDays = !isNewDay
+            ? state.workoutStreakDays
+            : streakContinues
+            ? state.workoutStreakDays + 1
+            : 1;
+
+          const count = state.workoutsThisWeek + 1;
+          const xp = state.totalXp + 50;
+          const { level, xpToNextLevel } = computeLevel(xp);
+          const weeks = count >= state.workoutStreakTarget
+            ? state.workoutStreakWeeks + 1
+            : state.workoutStreakWeeks;
+          return {
+            workoutsThisWeek: count,
+            workoutStreakWeeks: weeks,
+            workoutStreakDays,
+            lastWorkoutDate: today,
+            totalXp: xp,
+            level,
+            xpToNextLevel,
+          };
+        }),
+
+      setStreakTarget: (n) => set({ workoutStreakTarget: Math.max(1, Math.min(7, n)) }),
     }),
-
-  completeWaterGoal: () =>
-    set((state) => {
-      const xp = state.totalXp + 10;
-      const { level, xpToNextLevel } = computeLevel(xp);
-      return { waterStreakDays: state.waterStreakDays + 1, totalXp: xp, level, xpToNextLevel };
-    }),
-
-  completeWorkout: () =>
-    set((state) => {
-      const today = getTodayStr();
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const isNewDay = state.lastWorkoutDate !== today;
-      const streakContinues = state.lastWorkoutDate === yesterday || state.lastWorkoutDate === today;
-      const workoutStreakDays = !isNewDay
-        ? state.workoutStreakDays
-        : streakContinues
-        ? state.workoutStreakDays + 1
-        : 1;
-
-      const count = state.workoutsThisWeek + 1;
-      const xp = state.totalXp + 50;
-      const { level, xpToNextLevel } = computeLevel(xp);
-      const weeks = count >= state.workoutStreakTarget
-        ? state.workoutStreakWeeks + 1
-        : state.workoutStreakWeeks;
-      return {
-        workoutsThisWeek: count,
-        workoutStreakWeeks: weeks,
-        workoutStreakDays,
-        lastWorkoutDate: today,
-        totalXp: xp,
-        level,
-        xpToNextLevel,
-      };
-    }),
-}));
+    {
+      name: 'gamification-store-v1',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        workoutStreakWeeks: state.workoutStreakWeeks,
+        workoutStreakTarget: state.workoutStreakTarget,
+        workoutsThisWeek: state.workoutsThisWeek,
+        workoutStreakDays: state.workoutStreakDays,
+        lastWorkoutDate: state.lastWorkoutDate,
+        waterStreakDays: state.waterStreakDays,
+        totalXp: state.totalXp,
+        level: state.level,
+        xpToNextLevel: state.xpToNextLevel,
+        badges: state.badges,
+      }),
+    }
+  )
+);

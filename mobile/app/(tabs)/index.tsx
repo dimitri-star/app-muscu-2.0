@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState, useReducer, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
+  Modal,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -179,6 +181,123 @@ function getStyles(colors: ThemeColors) {
   });
 }
 
+// ─── Streak Modal ─────────────────────────────────────────────────────────────
+
+function StreakModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { workoutStreakWeeks, workoutStreakTarget, workoutsThisWeek, setStreakTarget } = useGamificationStore();
+  const [showObjectives, setShowObjectives] = useState(false);
+  const remaining = Math.max(0, workoutStreakTarget - workoutsThisWeek);
+  const message =
+    workoutStreakWeeks > 0
+      ? remaining === 0
+        ? 'Bravo ! Streak maintenu cette semaine ! 🎉'
+        : `Plus que ${remaining} entraînement${remaining > 1 ? 's' : ''} pour maintenir ton streak !`
+      : "Nouvelle semaine ! C'est le moment de s'y mettre.";
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <TouchableOpacity
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={{
+            backgroundColor: '#E8511A',
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            paddingHorizontal: 28,
+            paddingTop: 16,
+            paddingBottom: 48,
+          }}
+          onPress={() => {}}
+        >
+          {/* Handle */}
+          <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)', alignSelf: 'center', marginBottom: 20 }} />
+
+          {/* Close */}
+          <TouchableOpacity onPress={onClose} style={{ position: 'absolute', top: 20, right: 24 }}>
+            <Ionicons name="close" size={24} color="rgba(255,255,255,0.75)" />
+          </TouchableOpacity>
+
+          {/* Flame */}
+          <Text style={{ fontSize: 72, textAlign: 'center', marginBottom: 4 }}>🔥</Text>
+
+          {/* Count */}
+          <Text style={{ fontSize: 72, fontWeight: '900', color: '#FFFFFF', textAlign: 'center', lineHeight: 72 }}>
+            {workoutStreakWeeks}
+          </Text>
+          <Text style={{ fontSize: 20, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginBottom: 32, fontWeight: '600' }}>
+            semaine{workoutStreakWeeks > 1 ? 's' : ''} de streak
+          </Text>
+
+          {/* Week progress circles */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 24 }}>
+            {Array.from({ length: workoutStreakTarget }).map((_, i) => (
+              <View
+                key={i}
+                style={{
+                  width: 36, height: 36, borderRadius: 18,
+                  backgroundColor: i < workoutsThisWeek ? '#FFFFFF' : 'rgba(255,255,255,0.25)',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                {i < workoutsThisWeek && <Ionicons name="checkmark" size={20} color="#E8511A" />}
+              </View>
+            ))}
+          </View>
+          <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginBottom: 4 }}>
+            {workoutsThisWeek}/{workoutStreakTarget} séances cette semaine
+          </Text>
+
+          {/* Message */}
+          <Text style={{ fontSize: 16, color: '#FFFFFF', textAlign: 'center', marginBottom: 28, marginTop: 8, fontWeight: '600' }}>
+            {message}
+          </Text>
+
+          {/* Goals button / inline selector */}
+          {!showObjectives ? (
+            <TouchableOpacity
+              style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 14, paddingVertical: 15, alignItems: 'center' }}
+              onPress={() => setShowObjectives(true)}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700' }}>Mes objectifs</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 14, padding: 16 }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700', textAlign: 'center', marginBottom: 14 }}>
+                Séances par semaine
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', marginBottom: 14 }}>
+                {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                  <TouchableOpacity
+                    key={n}
+                    style={{
+                      width: 42, height: 42, borderRadius: 21,
+                      backgroundColor: n === workoutStreakTarget ? '#FFFFFF' : 'rgba(255,255,255,0.25)',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                    onPress={() => { setStreakTarget(n); setShowObjectives(false); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ color: n === workoutStreakTarget ? '#E8511A' : '#FFFFFF', fontSize: 16, fontWeight: '800' }}>
+                      {n}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity onPress={() => setShowObjectives(false)} style={{ alignItems: 'center', paddingVertical: 6 }}>
+                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Annuler</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 // ─── Components ───────────────────────────────────────────────────────────────
 
 function ActiveWorkoutCard({
@@ -190,9 +309,17 @@ function ActiveWorkoutCard({
   colors: ThemeColors;
   onPress: () => void;
 }) {
-  const { isActive, workoutName, timerSeconds, exercises } = useWorkoutStore();
+  const [, forceUpdate] = useReducer((x) => x + 1, 0);
+  const { isActive, workoutName, workoutStartTime, exercises } = useWorkoutStore();
   const totalSets = exercises.reduce((acc, ex) => acc + ex.sets.length, 0);
   const doneSets = exercises.reduce((acc, ex) => acc + ex.sets.filter((set) => set.done).length, 0);
+  const elapsedSeconds = workoutStartTime ? Math.floor((Date.now() - workoutStartTime) / 1000) : 0;
+
+  useEffect(() => {
+    if (!isActive) return;
+    const iv = setInterval(() => forceUpdate(), 1000);
+    return () => clearInterval(iv);
+  }, [isActive]);
 
   if (!isActive) {
     return (
@@ -213,7 +340,7 @@ function ActiveWorkoutCard({
           <Ionicons name="radio-button-on" size={9} color={colors.accent} />
           <Text style={s.activeBadgeText}>EN COURS</Text>
         </View>
-        <Text style={s.activeTimer}>{formatTimer(timerSeconds)}</Text>
+        <Text style={s.activeTimer}>{formatTimer(elapsedSeconds)}</Text>
       </View>
       <Text style={s.activeWorkoutName}>{workoutName}</Text>
       <View style={s.activeStatsRow}>
@@ -288,26 +415,64 @@ function WaterCard({
   const { current, goal, addWater, checkAndResetDaily } = useWaterStore();
   const pct = Math.min(current / goal, 1);
 
+  const floatY = useRef(new Animated.Value(0)).current;
+  const floatOpacity = useRef(new Animated.Value(0)).current;
+  const [lastAdded, setLastAdded] = useState<number | null>(null);
+
   useEffect(() => {
     checkAndResetDaily();
   }, []);
 
+  const handleAddWater = (amount: number) => {
+    addWater(amount);
+    setLastAdded(amount);
+    floatY.setValue(0);
+    floatOpacity.setValue(1);
+    Animated.parallel([
+      Animated.timing(floatY, { toValue: -56, duration: 1100, useNativeDriver: true }),
+      Animated.sequence([
+        Animated.delay(500),
+        Animated.timing(floatOpacity, { toValue: 0, duration: 600, useNativeDriver: true }),
+      ]),
+    ]).start();
+  };
+
   return (
-    <View style={s.waterCard}>
+    <View style={[s.waterCard, { overflow: 'visible' }]}>
+      {/* Floating animation */}
+      {lastAdded !== null && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 8,
+            alignSelf: 'center',
+            zIndex: 20,
+            opacity: floatOpacity,
+            transform: [{ translateY: floatY }],
+          }}
+        >
+          <Text style={{ color: colors.info, fontSize: 17, fontWeight: '800' }}>
+            💧 +{lastAdded} ml
+          </Text>
+        </Animated.View>
+      )}
+
       <View style={s.waterTopRow}>
         <View style={s.waterAmountRow}>
+          <Text style={{ fontSize: 20 }}>💧</Text>
           <Text style={s.waterAmount}>{current}</Text>
           <Text style={s.waterUnit}>ml</Text>
         </View>
-        <Text style={s.waterGoal}>/ {goal} ml</Text>
+        <Text style={s.waterGoal}>/ {goal} ml 💧</Text>
       </View>
       <View style={s.waterTrack}>
         <View style={[s.waterFill, { width: `${Math.round(pct * 100)}%` as any }]} />
       </View>
       <View style={s.waterBtns}>
         {[250, 500, 750].map((a) => (
-          <TouchableOpacity key={a} style={s.waterBtn} onPress={() => addWater(a)} activeOpacity={0.8}>
-            <Text style={s.waterBtnText}>+{a} ml</Text>
+          <TouchableOpacity key={a} style={s.waterBtn} onPress={() => handleAddWater(a)} activeOpacity={0.8}>
+            <Text style={s.waterBtnText}>💧 +{a} ml</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -378,7 +543,8 @@ export default function DashboardScreen() {
   const colors = getColors(isDark);
   const s = useMemo(() => getStyles(colors), [isDark]);
   const router = useRouter();
-  const workoutStreakDays = useGamificationStore((s) => s.workoutStreakDays);
+  const { workoutStreakDays } = useGamificationStore();
+  const [showStreak, setShowStreak] = useState(false);
 
   const goToSeance = () => router.push('/(tabs)/seance' as any);
 
@@ -390,11 +556,12 @@ export default function DashboardScreen() {
       />
       <View style={s.header}>
         <Text style={s.appName}>FitTrack Pro</Text>
-        <View style={s.streakBadge}>
+        <TouchableOpacity style={s.streakBadge} onPress={() => setShowStreak(true)} activeOpacity={0.8}>
           <Text style={s.streakFlame}>🔥</Text>
           <Text style={s.streakBadgeText}>{workoutStreakDays}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
+      <StreakModal visible={showStreak} onClose={() => setShowStreak(false)} />
 
       <ScrollView
         style={s.scroll}
