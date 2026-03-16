@@ -14,7 +14,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { MacroColors } from '../../constants/colors';
 import { useThemeStore } from '../../store/theme';
 import { getColors } from '../../constants/theme';
-import { useNutritionStore, useWaterStore } from '../../store';
+import { useNutritionStore, useWaterStore, getShortDayFromDate } from '../../store';
 import type { MealEntry } from '../../constants/mockData';
 
 // ─── Tab Switcher ─────────────────────────────────────────────────────────────
@@ -447,13 +447,15 @@ function HydrationTab() {
       <View style={hydroStyles.weekCard}>
         <Text style={hydroStyles.sectionTitle}>7 derniers jours</Text>
         <View style={hydroStyles.weekBars}>
-          {weekHistory.map((day, i) => {
+          {weekHistory.map((day) => {
             const pct = Math.min(day.amount / day.goal, 1);
-            const isToday = i === weekHistory.length - 1;
+            const todayStr = new Date().toISOString().split('T')[0];
+            const isToday = day.date === todayStr;
+            const label = getShortDayFromDate(day.date);
             return (
-              <View key={day.day} style={hydroStyles.barCol}>
+              <View key={day.date} style={hydroStyles.barCol}>
                 <Text style={hydroStyles.barAmount}>
-                  {day.amount >= 1000 ? `${(day.amount / 1000).toFixed(1)}` : day.amount}
+                  {day.amount >= 1000 ? `${(day.amount / 1000).toFixed(1)}` : day.amount > 0 ? day.amount : ''}
                 </Text>
                 <View style={hydroStyles.barTrack}>
                   <View
@@ -467,7 +469,7 @@ function HydrationTab() {
                   />
                 </View>
                 <Text style={[hydroStyles.barDay, isToday && { color: '#4C9FFF', fontWeight: '800' }]}>
-                  {day.day}
+                  {label}
                 </Text>
               </View>
             );

@@ -18,7 +18,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
-import { useWorkoutStore, useWaterStore, useProgramStore, useGamificationStore } from '../../store';
+import { useWorkoutStore, useWaterStore, useProgramStore, useGamificationStore, getShortDayFromDate } from '../../store';
 import { weeklyProgram, exercisesDB } from '../../constants/mockData';
 import { PROGRAMME_API } from '../../constants/api';
 import type { WorkoutExercise, Exercise } from '../../constants/mockData';
@@ -1496,12 +1496,15 @@ function WaterContent() {
           {weekHistory.map((d) => {
             const h = (d.amount / maxBar) * 80;
             const isGoal = d.amount >= d.goal;
+            const todayStr = new Date().toISOString().split('T')[0];
+            const isToday = d.date === todayStr;
+            const label = getShortDayFromDate(d.date);
             return (
-              <View key={d.day} style={waterStyles.barCol}>
+              <View key={d.date} style={waterStyles.barCol}>
                 <View style={waterStyles.barTrack}>
-                  <View style={[waterStyles.barFill, { height: h, backgroundColor: isGoal ? colors.accent : colors.info }]} />
+                  <View style={[waterStyles.barFill, { height: h, backgroundColor: isToday ? '#4C9FFF' : isGoal ? colors.accent : colors.info }]} />
                 </View>
-                <Text style={waterStyles.barDay}>{d.day}</Text>
+                <Text style={[waterStyles.barDay, isToday && { color: '#4C9FFF', fontWeight: '700' }]}>{label}</Text>
               </View>
             );
           })}

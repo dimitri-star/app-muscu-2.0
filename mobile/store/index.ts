@@ -17,7 +17,7 @@ interface WaterState {
   current: number;
   goal: number;
   entries: WaterEntry[];
-  weekHistory: { day: string; amount: number; goal: number }[];
+  weekHistory: { date: string; amount: number; goal: number }[];
   lastResetDate: string;
   addWater: (amount: number) => void;
   removeEntry: (id: string) => void;
@@ -30,20 +30,22 @@ function getTodayStr(): string {
   return new Date().toISOString().split('T')[0];
 }
 
-function getDayShortName(dateStr: string): string {
+export function getShortDayFromDate(dateStr: string): string {
   const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-  return dayNames[new Date(dateStr).getDay()];
+  // Add T12:00:00 to avoid UTC midnight timezone offset issues
+  return dayNames[new Date(dateStr + 'T12:00:00').getDay()];
 }
 
-const initialWeekHistory = [
-  { day: 'Mer', amount: 2800, goal: 3100 },
-  { day: 'Jeu', amount: 3100, goal: 3100 },
-  { day: 'Ven', amount: 2400, goal: 3100 },
-  { day: 'Sam', amount: 3100, goal: 3100 },
-  { day: 'Dim', amount: 2600, goal: 3100 },
-  { day: 'Lun', amount: 3100, goal: 3100 },
-  { day: 'Mar', amount: 1800, goal: 3100 },
-];
+// Génère les 7 derniers jours (dont aujourd'hui) avec les vraies dates ISO
+function buildWeekHistory(goal: number, todayAmount = 0): { date: string; amount: number; goal: number }[] {
+  const today = new Date();
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - (6 - i));
+    const dateStr = d.toISOString().split('T')[0];
+    return { date: dateStr, amount: i === 6 ? todayAmount : 0, goal };
+  });
+}
 
 export const useWaterStore = create<WaterState>()(
   persist(
@@ -51,7 +53,7 @@ export const useWaterStore = create<WaterState>()(
       current: 0,
       goal: DAILY_GOALS.water,
       entries: [],
-      weekHistory: initialWeekHistory,
+      weekHistory: buildWeekHistory(DAILY_GOALS.water),
       lastResetDate: getTodayStr(),
 
       checkAndResetDaily: () => {
@@ -59,34 +61,41 @@ export const useWaterStore = create<WaterState>()(
         const today = getTodayStr();
         if (state.lastResetDate === today) return;
 
-        // Archive yesterday to weekHistory (keep last 7 days)
-        const dayName = getDayShortName(state.lastResetDate);
-        const newHistory = [
-          ...state.weekHistory.slice(-6),
-          { day: dayName, amount: state.current, goal: state.goal },
-        ];
+        // Archive previous day's amount into history, then rebuild 7-day window
+        const archived = state.weekHistory.map((h) =>
+          h.date === state.lastResetDate ? { ...h, amount: state.current } : h
+        );
 
-        set({
-          current: 0,
-          entries: [],
-          weekHistory: newHistory,
-          lastResetDate: today,
+        // Rebuild: keep any existing entries, fill gaps with 0, always end with today
+        const byDate = Object.fromEntries(archived.map((h) => [h.date, h]));
+        const newHistory = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - (6 - i));
+          const dateStr = d.toISOString().split('T')[0];
+          return byDate[dateStr] ?? { date: dateStr, amount: 0, goal: state.goal };
         });
+
+        set({ current: 0, entries: [], weekHistory: newHistory, lastResetDate: today });
       },
 
       addWater: (amount) => {
         const now = new Date();
         const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const today = getTodayStr();
         const newEntry: WaterEntry = {
           id: `w_${Date.now()}`,
           amount,
           time,
           timestamp: Date.now(),
         };
-        set((state) => ({
-          current: state.current + amount,
-          entries: [...state.entries, newEntry],
-        }));
+        set((state) => {
+          const newCurrent = state.current + amount;
+          // Sync today's bar in the weekly history
+          const newHistory = state.weekHistory.map((h) =>
+            h.date === today ? { ...h, amount: newCurrent } : h
+          );
+          return { current: newCurrent, entries: [...state.entries, newEntry], weekHistory: newHistory };
+        });
       },
 
       removeEntry: (id) =>
@@ -104,7 +113,7 @@ export const useWaterStore = create<WaterState>()(
       setGoal: (goal) => set({ goal }),
     }),
     {
-      name: 'water-store-v2',
+      name: 'water-store-v3',
       storage: createJSONStorage(() => getPlatformStorage()),
       partialize: (state) => ({
         current: state.current,
