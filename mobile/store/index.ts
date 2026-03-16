@@ -30,6 +30,15 @@ function getTodayStr(): string {
   return new Date().toISOString().split('T')[0];
 }
 
+// ISO date of the Monday of the current week
+function getMondayStr(): string {
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun
+  const d = new Date(today);
+  d.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  return d.toISOString().split('T')[0];
+}
+
 export function getShortDayFromDate(dateStr: string): string {
   const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
   // Add T12:00:00 to avoid UTC midnight timezone offset issues
@@ -165,6 +174,7 @@ interface WorkoutState {
   tickRestTimer: () => void;
   stopRestTimer: () => void;
   addCustomExercise: (ex: CustomExercise) => void;
+  checkStaleWorkout: () => void;
 }
 
 export const useWorkoutStore = create<WorkoutState>()(
@@ -215,6 +225,15 @@ export const useWorkoutStore = create<WorkoutState>()(
 
       tickTimer: () => {},
       addCustomExercise: (ex) => set((state) => ({ customExercises: [...state.customExercises, ex] })),
+
+      checkStaleWorkout: () => {
+        const state = get();
+        if (!state.isActive || !state.workoutStartTime) return;
+        const startDate = new Date(state.workoutStartTime).toISOString().split('T')[0];
+        if (startDate !== getTodayStr()) {
+          set({ isActive: false, workoutStartTime: null });
+        }
+      },
 
       toggleSetDone: (exerciseId, setId) =>
         set((state) => ({
@@ -359,10 +378,12 @@ interface MacroTotals {
 interface NutritionState {
   meals: MealEntry[];
   goals: typeof DAILY_GOALS;
+  lastMealDate: string;
   getTotals: () => MacroTotals;
   getMealTotals: (mealType: MealEntry['mealType']) => MacroTotals;
   addMeal: (meal: MealEntry) => void;
   removeMeal: (id: string) => void;
+  checkAndResetDaily: () => void;
 }
 
 const calcMacros = (meals: MealEntry[]): MacroTotals =>
@@ -384,20 +405,28 @@ const calcMacros = (meals: MealEntry[]): MacroTotals =>
 export const useNutritionStore = create<NutritionState>()(
   persist(
     (set, get) => ({
-      meals: todayMeals,
+      meals: [],
       goals: DAILY_GOALS,
+      lastMealDate: getTodayStr(),
 
       getTotals: () => calcMacros(get().meals),
       getMealTotals: (mealType) => calcMacros(get().meals.filter((m) => m.mealType === mealType)),
       addMeal: (meal) => set((state) => ({ meals: [...state.meals, meal] })),
       removeMeal: (id) => set((state) => ({ meals: state.meals.filter((m) => m.id !== id) })),
+
+      checkAndResetDaily: () => {
+        const today = getTodayStr();
+        if (get().lastMealDate === today) return;
+        set({ meals: [], lastMealDate: today });
+      },
     }),
     {
-      name: 'nutrition-store-v1',
+      name: 'nutrition-store-v2',
       storage: createJSONStorage(() => getPlatformStorage()),
       partialize: (state) => ({
         meals: state.meals,
         goals: state.goals,
+        lastMealDate: state.lastMealDate,
       }),
     }
   )
@@ -488,6 +517,7 @@ interface GamificationState {
   workoutsThisWeek: number;
   workoutStreakDays: number;
   lastWorkoutDate: string | null;
+  lastWeekStartDate: string;
   waterStreakDays: number;
   totalXp: number;
   level: string;
@@ -497,6 +527,7 @@ interface GamificationState {
   completeWaterGoal: () => void;
   completeWorkout: () => void;
   setStreakTarget: (n: number) => void;
+  checkAndResetWeekly: () => void;
 }
 
 const XP_LEVELS = [
@@ -539,6 +570,7 @@ export const useGamificationStore = create<GamificationState>()(
       workoutsThisWeek: 0,
       workoutStreakDays: 0,
       lastWorkoutDate: null,
+      lastWeekStartDate: getMondayStr(),
       waterStreakDays: 0,
       totalXp: 0,
       level: INIT_LEVEL,
@@ -589,9 +621,22 @@ export const useGamificationStore = create<GamificationState>()(
         }),
 
       setStreakTarget: (n) => set({ workoutStreakTarget: Math.max(1, Math.min(7, n)) }),
+
+      checkAndResetWeekly: () => {
+        const monday = getMondayStr();
+        const state = get();
+        if (state.lastWeekStartDate === monday) return;
+        // New week started: archive streak if target was met last week, then reset count
+        const streakContinues = state.workoutsThisWeek >= state.workoutStreakTarget;
+        set({
+          workoutsThisWeek: 0,
+          lastWeekStartDate: monday,
+          workoutStreakWeeks: streakContinues ? state.workoutStreakWeeks : 0,
+        });
+      },
     }),
     {
-      name: 'gamification-store-v1',
+      name: 'gamification-store-v2',
       storage: createJSONStorage(() => getPlatformStorage()),
       partialize: (state) => ({
         workoutStreakWeeks: state.workoutStreakWeeks,
@@ -599,6 +644,7 @@ export const useGamificationStore = create<GamificationState>()(
         workoutsThisWeek: state.workoutsThisWeek,
         workoutStreakDays: state.workoutStreakDays,
         lastWorkoutDate: state.lastWorkoutDate,
+        lastWeekStartDate: state.lastWeekStartDate,
         waterStreakDays: state.waterStreakDays,
         totalXp: state.totalXp,
         level: state.level,

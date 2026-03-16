@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -665,9 +665,16 @@ export default function NutritionScreen() {
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const styles = getNutritionStyles(colors);
-  const { meals, goals, getTotals, getMealTotals, removeMeal } = useNutritionStore();
+  const { meals, goals, getTotals, getMealTotals, removeMeal, checkAndResetDaily } = useNutritionStore();
+  const { checkAndResetDaily: checkWaterDaily } = useWaterStore();
   const [activeTab, setActiveTab] = useState<'nutrition' | 'hydratation'>('nutrition');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    checkAndResetDaily();
+    checkWaterDaily();
+  }, []);
+
   const totals = getTotals();
 
   const caloriesRemaining = Math.max(goals.calories - totals.calories, 0);

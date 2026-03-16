@@ -543,8 +543,14 @@ export default function DashboardScreen() {
   const colors = getColors(isDark);
   const s = useMemo(() => getStyles(colors), [isDark]);
   const router = useRouter();
-  const { workoutStreakDays } = useGamificationStore();
+  const { workoutStreakDays, checkAndResetWeekly } = useGamificationStore();
+  const { checkStaleWorkout } = useWorkoutStore();
   const [showStreak, setShowStreak] = useState(false);
+
+  useEffect(() => {
+    checkAndResetWeekly();
+    checkStaleWorkout();
+  }, []);
 
   const goToSeance = () => router.push('/(tabs)/seance' as any);
 

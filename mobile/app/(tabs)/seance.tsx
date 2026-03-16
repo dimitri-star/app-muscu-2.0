@@ -374,10 +374,19 @@ function SeanceContent() {
     deleteWorkout,
     tickRestTimer,
     stopRestTimer,
+    checkStaleWorkout,
   } = useWorkoutStore();
 
-  const { workoutStreakWeeks, workoutStreakTarget, workoutsThisWeek, setStreakTarget } = useGamificationStore();
+  const { workoutStreakWeeks, workoutStreakTarget, workoutsThisWeek, setStreakTarget, checkAndResetWeekly } = useGamificationStore();
   const [showObjectivesInStreak, setShowObjectivesInStreak] = useState(false);
+
+  // Check daily/weekly resets on focus
+  useFocusEffect(
+    useCallback(() => {
+      checkAndResetWeekly();
+      checkStaleWorkout();
+    }, [])
+  );
 
   const [, forceUpdate] = useReducer((x) => x + 1, 0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
