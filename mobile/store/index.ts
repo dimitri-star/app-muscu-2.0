@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPlatformStorage } from './storage';
 import { todayWorkout, todayMeals, DAILY_GOALS, recentWorkouts } from '../constants/mockData';
 import type { WorkoutExercise, MealEntry, WorkoutSet, Workout } from '../constants/mockData';
 
@@ -105,7 +105,7 @@ export const useWaterStore = create<WaterState>()(
     }),
     {
       name: 'water-store-v2',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPlatformStorage()),
       partialize: (state) => ({
         current: state.current,
         goal: state.goal,
@@ -325,7 +325,7 @@ export const useWorkoutStore = create<WorkoutState>()(
     }),
     {
       name: 'workout-store-v2',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPlatformStorage()),
       partialize: (state) => ({
         savedWorkouts: state.savedWorkouts,
         customExercises: state.customExercises,
@@ -385,7 +385,7 @@ export const useNutritionStore = create<NutritionState>()(
     }),
     {
       name: 'nutrition-store-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPlatformStorage()),
       partialize: (state) => ({
         meals: state.meals,
         goals: state.goals,
@@ -583,7 +583,7 @@ export const useGamificationStore = create<GamificationState>()(
     }),
     {
       name: 'gamification-store-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPlatformStorage()),
       partialize: (state) => ({
         workoutStreakWeeks: state.workoutStreakWeeks,
         workoutStreakTarget: state.workoutStreakTarget,
