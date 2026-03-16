@@ -32,3 +32,6 @@ pnpm-debug.*
 # Build / cache
 *.tsbuildinfo
 .vercel
+
+# Local Netlify folder
+.netlify
