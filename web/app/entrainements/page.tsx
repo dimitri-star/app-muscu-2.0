@@ -4,8 +4,31 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dumbbell, Clock, Weight, LayoutGrid, List, ChevronDown } from "lucide-react";
+import { Dumbbell, Clock, Weight, LayoutGrid, List, ChevronDown, Download } from "lucide-react";
 import { allWorkouts } from "@/lib/mockData";
+
+function exportToCSV() {
+  const headers = ["Séance", "Date", "Durée", "Volume", "Exercices", "Groupe Musculaire", "Exercices Principaux"];
+  const rows = allWorkouts.map((w) => [
+    w.title,
+    w.date,
+    w.duration,
+    w.volume,
+    w.exerciseCount,
+    w.muscleGroup,
+    w.topExercises.join(" | "),
+  ]);
+  const csvContent = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(";"))
+    .join("\n");
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `seances_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const ACCENT = "#1DB954";
 const CARD_BG = "#FFFFFF";
@@ -33,12 +56,22 @@ export default function EntrainementsPage() {
             {allWorkouts.length} séances enregistrées
           </p>
         </div>
-        <Button
-          style={{ backgroundColor: ACCENT, color: "#FFFFFF" }}
-          className="font-semibold"
-        >
-          + Nouvelle séance
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={exportToCSV}
+            className="font-semibold flex items-center gap-2"
+            style={{ borderColor: BORDER, color: MUTED }}
+          >
+            <Download className="w-4 h-4" /> Export Excel
+          </Button>
+          <Button
+            style={{ backgroundColor: ACCENT, color: "#FFFFFF" }}
+            className="font-semibold"
+          >
+            + Nouvelle séance
+          </Button>
+        </div>
       </div>
 
       {/* Filters + View toggle */}
