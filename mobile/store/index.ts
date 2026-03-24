@@ -654,3 +654,173 @@ export const useGamificationStore = create<GamificationState>()(
     }
   )
 );
+
+// ─── CHRONO STORE ──────────────────────────────────────────────────────────────
+// Timestamp-based: timers survive tab switches, app backgrounding, and full kills.
+
+export interface LapRecord {
+  id: number;
+  elapsedSec: number;
+  splitSec: number;
+}
+
+interface ChronoState {
+  // Stopwatch
+  swRunning: boolean;
+  swStartMs: number | null;
+  swAccMs: number;
+  swLaps: LapRecord[];
+  // Timer (countdown)
+  timerPreset: number;
+  timerRunning: boolean;
+  timerEndMs: number | null;
+  timerRemMs: number;
+  // Repos (rest countdown, fixed 90s default)
+  reposRunning: boolean;
+  reposEndMs: number | null;
+  reposRemMs: number;
+  // Tabata
+  tabataRunning: boolean;
+  tabataIsWork: boolean;
+  tabataPhaseEndMs: number | null;
+  tabataPhaseRemMs: number;
+  tabataRounds: number;
+  // Actions
+  swStart: () => void;
+  swPause: () => void;
+  swReset: () => void;
+  swLap: () => void;
+  timerSetPreset: (seconds: number) => void;
+  timerStart: () => void;
+  timerPause: () => void;
+  timerReset: () => void;
+  reposStart: () => void;
+  reposPause: () => void;
+  reposReset: () => void;
+  tabataStart: () => void;
+  tabataPause: () => void;
+  tabataReset: () => void;
+  tabataCheckAdvance: () => void;
+}
+
+export const useChronoStore = create<ChronoState>()(
+  persist(
+    (set, get) => ({
+      swRunning: false,
+      swStartMs: null,
+      swAccMs: 0,
+      swLaps: [],
+      timerPreset: 60,
+      timerRunning: false,
+      timerEndMs: null,
+      timerRemMs: 60000,
+      reposRunning: false,
+      reposEndMs: null,
+      reposRemMs: 90000,
+      tabataRunning: false,
+      tabataIsWork: true,
+      tabataPhaseEndMs: null,
+      tabataPhaseRemMs: 20000,
+      tabataRounds: 0,
+
+      swStart: () => {
+        const s = get();
+        if (s.swRunning) return;
+        set({ swRunning: true, swStartMs: Date.now() });
+      },
+      swPause: () => {
+        const s = get();
+        if (!s.swRunning || s.swStartMs == null) return;
+        set({ swRunning: false, swAccMs: s.swAccMs + (Date.now() - s.swStartMs), swStartMs: null });
+      },
+      swReset: () => set({ swRunning: false, swStartMs: null, swAccMs: 0, swLaps: [] }),
+      swLap: () => {
+        const s = get();
+        const ms = s.swRunning && s.swStartMs != null ? s.swAccMs + (Date.now() - s.swStartMs) : s.swAccMs;
+        const elapsedSec = Math.floor(ms / 1000);
+        const prevSec = s.swLaps.length > 0 ? s.swLaps[0].elapsedSec : 0;
+        set({ swLaps: [{ id: Date.now(), elapsedSec, splitSec: elapsedSec - prevSec }, ...s.swLaps] });
+      },
+
+      timerSetPreset: (seconds) =>
+        set({ timerPreset: seconds, timerRemMs: seconds * 1000, timerRunning: false, timerEndMs: null }),
+      timerStart: () => {
+        const s = get();
+        if (s.timerRunning || s.timerRemMs <= 0) return;
+        set({ timerRunning: true, timerEndMs: Date.now() + s.timerRemMs });
+      },
+      timerPause: () => {
+        const s = get();
+        if (!s.timerRunning || s.timerEndMs == null) return;
+        set({ timerRunning: false, timerRemMs: Math.max(0, s.timerEndMs - Date.now()), timerEndMs: null });
+      },
+      timerReset: () => {
+        const s = get();
+        set({ timerRunning: false, timerEndMs: null, timerRemMs: s.timerPreset * 1000 });
+      },
+
+      reposStart: () => {
+        const s = get();
+        if (s.reposRunning || s.reposRemMs <= 0) return;
+        set({ reposRunning: true, reposEndMs: Date.now() + s.reposRemMs });
+      },
+      reposPause: () => {
+        const s = get();
+        if (!s.reposRunning || s.reposEndMs == null) return;
+        set({ reposRunning: false, reposRemMs: Math.max(0, s.reposEndMs - Date.now()), reposEndMs: null });
+      },
+      reposReset: () => set({ reposRunning: false, reposEndMs: null, reposRemMs: 90000 }),
+
+      tabataStart: () => {
+        const s = get();
+        if (s.tabataRunning) return;
+        set({ tabataRunning: true, tabataPhaseEndMs: Date.now() + s.tabataPhaseRemMs });
+      },
+      tabataPause: () => {
+        const s = get();
+        if (!s.tabataRunning || s.tabataPhaseEndMs == null) return;
+        set({
+          tabataRunning: false,
+          tabataPhaseRemMs: Math.max(0, s.tabataPhaseEndMs - Date.now()),
+          tabataPhaseEndMs: null,
+        });
+      },
+      tabataReset: () =>
+        set({ tabataRunning: false, tabataIsWork: true, tabataPhaseEndMs: null, tabataPhaseRemMs: 20000, tabataRounds: 0 }),
+      tabataCheckAdvance: () => {
+        const s = get();
+        if (!s.tabataRunning || s.tabataPhaseEndMs == null || Date.now() < s.tabataPhaseEndMs) return;
+        const nextIsWork = !s.tabataIsWork;
+        const nextMs = nextIsWork ? 20000 : 10000;
+        set({
+          tabataIsWork: nextIsWork,
+          tabataRounds: s.tabataIsWork ? s.tabataRounds + 1 : s.tabataRounds,
+          tabataPhaseEndMs: Date.now() + nextMs,
+          tabataPhaseRemMs: nextMs,
+        });
+      },
+    }),
+    {
+      name: 'chrono-store-v1',
+      storage: createJSONStorage(() => getPlatformStorage()),
+      partialize: (state) => ({
+        swRunning: state.swRunning,
+        swStartMs: state.swStartMs,
+        swAccMs: state.swAccMs,
+        swLaps: state.swLaps,
+        timerPreset: state.timerPreset,
+        timerRunning: state.timerRunning,
+        timerEndMs: state.timerEndMs,
+        timerRemMs: state.timerRemMs,
+        reposRunning: state.reposRunning,
+        reposEndMs: state.reposEndMs,
+        reposRemMs: state.reposRemMs,
+        tabataRunning: state.tabataRunning,
+        tabataIsWork: state.tabataIsWork,
+        tabataPhaseEndMs: state.tabataPhaseEndMs,
+        tabataPhaseRemMs: state.tabataPhaseRemMs,
+        tabataRounds: state.tabataRounds,
+      }),
+    }
+  )
+);

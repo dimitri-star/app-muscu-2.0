@@ -88,12 +88,12 @@ export interface UserProfile {
 
 export const userProfile: UserProfile = {
   id: 'user_001',
-  name: 'Dimitri Alvarez',
+  name: 'Dimitri',
   username: 'dimitri.alv',
-  bio: 'Muscu & Marathon 2026',
-  age: 21,
-  height: 178,
-  weight: 78,
+  bio: 'Sèche & Force — Bloc 1',
+  age: 22,
+  height: 163,
+  weight: 66.5,
   followers: 12,
   following: 8,
   totalWorkouts: 156,
@@ -144,15 +144,16 @@ export const exercisesDB: Exercise[] = [
 // ─── PERSONAL RECORDS ─────────────────────────────────────────────────────────
 
 export const personalRecords: PersonalRecord[] = [
-  { id: 'pr_001', exercise: 'Dips lestés',                       weight: 107.5, reps: 1, date: '1 Fév 2026',  notes: 'PR Dips — single propre, lockout clean' },
-  { id: 'pr_002', exercise: 'Développé couché',                  weight: 125,   reps: 1, date: '28 Oct 2025', notes: 'PR Bench barre — bon bar path' },
-  { id: 'pr_003', exercise: 'Développé couché haltères',         weight: 56,    reps: 1, date: '1 Mar 2026',  notes: 'PR Bench haltères — par bras, RPE 9.5' },
-  { id: 'pr_004', exercise: 'Tractions lestées',                 weight: 45,    reps: 1, date: '1 Mar 2026',  notes: 'PR Tractions — menton clair, iso rep propre' },
-  { id: 'pr_005', exercise: 'Back Squat',                        weight: 170,   reps: 1, date: '5 Mar 2026',  notes: 'PR Squat — ceinture, 2s descente' },
-  { id: 'pr_006', exercise: 'Soulevé de terre roumain',          weight: 140,   reps: 6, date: '15 Fév 2026', notes: 'PR RDL volume' },
-  { id: 'pr_007', exercise: 'OHP',                               weight: 61.5,  reps: 5, date: '8 Mar 2026',  notes: 'PR OHP' },
-  { id: 'pr_008', exercise: 'Curl barre',                        weight: 46.5,  reps: 5, date: '8 Mar 2026',  notes: 'PR Curl barre — strict' },
-  { id: 'pr_009', exercise: 'Muscle-Up',                         weight: 4,     reps: 1, date: '5 Mar 2026',  notes: 'PR MU lesté — +4kg, propre' },
+  { id: 'pr_001', exercise: 'Développé couché haltères',         weight: 58,  reps: 1, date: '21 Mar 2026',   notes: 'PR Bench haltères — par bras' },
+  { id: 'pr_002', exercise: 'Développé couché',                  weight: 125, reps: 1, date: 'Estimé',        notes: 'PR Bench barre — estimé' },
+  { id: 'pr_003', exercise: 'Dips lestés',                       weight: 100, reps: 2, date: 'S4 ancien bloc', notes: '+100kg de lest, 2 reps' },
+  { id: 'pr_004', exercise: 'Tractions pronation lestées',       weight: 45,  reps: 1, date: 'S4 ancien bloc', notes: 'RPE 10 — tire avec bras' },
+  { id: 'pr_005', exercise: 'Back Squat',                        weight: 150, reps: 1, date: 'S5 ancien bloc', notes: 'Technique à revoir' },
+  { id: 'pr_006', exercise: 'OHP barre',                         weight: 65,  reps: 1, date: 'Estimé',        notes: 'PR OHP barre — estimé' },
+  { id: 'pr_007', exercise: 'OHP haltères',                      weight: 36,  reps: 1, date: 'Estimé',        notes: 'Par bras — estimé' },
+  { id: 'pr_008', exercise: 'Soulevé de terre roumain',          weight: 120, reps: 6, date: '',               notes: 'RDL ceinture' },
+  { id: 'pr_009', exercise: 'Curl barre',                        weight: 46,  reps: 5, date: '',               notes: 'Curl barre strict' },
+  { id: 'pr_010', exercise: 'Rowing barre',                      weight: 81,  reps: 6, date: '',               notes: 'Row barre' },
 ];
 
 // ─── RECENT WORKOUTS ──────────────────────────────────────────────────────────
@@ -402,105 +403,105 @@ export const todayMeals: MealEntry[] = [
   { id: 'm10', foodItem: foodDatabase[1], quantity: 150, mealType: 'dinner' },
 ];
 
-// ─── BLOC 6 SEMAINES — S5 RÉALISATION (semaine courante) ──────────────────────
-// Bloc : 8 fév → 21 mars 2026 · Aujourd'hui : 10 mars (S5)
+// ─── BLOC 1 — HYBRIDE FORCE/CARDIO/CALISTHÉNIE ────────────────────────────────
+// Objectif : Sèche + Force + Technique (trac/squat) + Reprise course + Calisthénie
 
 export const weeklyProgram: DayProgram[] = [
   {
     day: 'Lundi',
     shortDay: 'Lun',
     type: 'push',
-    label: 'Bench & Tractions (lourd)',
+    label: 'Bench Halt FORCE + Tractions Prona FORCE',
     color: '#4C9FFF',
     exercises: [
-      'Développé couché 2×3 @115-118kg + back-offs',
-      'Tractions lestées 2×3 @+40-45kg',
-      'Row barre 2×6 + 1×12 @80/68kg',
-      'Muscle-Up singles 5-6×1 @BW',
+      'Développé couché haltères FORCE — objectif 60kg/main',
+      'Tractions pronation FORCE — technique dorsaux (objectif -bras)',
+      'Avant-bras — curl inversé / flexion poignets',
     ],
   },
   {
     day: 'Mardi',
     shortDay: 'Mar',
-    type: 'push',
-    label: 'Dips Volume & Épaules',
-    color: '#A855F7',
+    type: 'cardio',
+    label: 'Run — Z2 ou Fractionné',
+    color: '#1DB954',
     exercises: [
-      'Dips lestés 2×3 @+90kg + option single',
-      'DB Shoulder Press 3×8-10 @30kg',
-      'Row unilatéral 3×10 @40kg',
-      'Tour du rack 2× @12kg',
+      'Run Z2 45-50min @5:20-5:40/km',
+      'OU Fractionné 10×1\'30',
     ],
   },
   {
     day: 'Mercredi',
     shortDay: 'Mer',
     type: 'legs',
-    label: 'Back Squat & Legs (lourd)',
+    label: 'Lower — Squat technique + Mobilité',
     color: '#FF6B35',
     exercises: [
-      'Back Squat single lourd 165-170kg + 2×3 @145-150kg',
-      'Pendulum squat 3×10-12 @20kg',
-      'Soulevé de terre roumain 3×6 @100-110kg',
-      'Leg curl 3×12 @35-40kg',
+      'Back Squat technique — objectif 140×3 propre',
+      'Mobilité chevilles',
+      'Accessoires jambes',
     ],
   },
   {
     day: 'Jeudi',
     shortDay: 'Jeu',
     type: 'full',
-    label: 'Dips Force & Tractions & Bench',
+    label: 'Dips VOL + Bench Barre VOL + Trac Supi + OHP Halt',
     color: '#EC4899',
     exercises: [
-      'Dips lestés 2×2 @+95-102.5kg',
-      'Tractions lestées 3×6-8 @+20-25kg',
-      'Développé couché back-offs 2×2 @92.5-102.5kg',
-      'Muscle-Up singles @BW+1kg',
+      'Dips lestés VOLUME — objectif +102-105kg',
+      'Développé couché barre VOLUME — objectif 127-130kg',
+      'Tractions supination VOLUME',
+      'OHP haltères VOLUME — objectif 38kg/main',
+      'Abdos',
     ],
   },
   {
     day: 'Vendredi',
     shortDay: 'Ven',
     type: 'cardio',
-    label: 'Cardio — Vélo fractionné',
+    label: 'Run',
     color: '#1DB954',
     exercises: [
-      'Vélo fractionné 8×1min Z5 / 1min Z1',
+      'Run Z2 ou fractionné',
     ],
   },
   {
     day: 'Samedi',
     shortDay: 'Sam',
-    type: 'pull',
-    label: 'OHP & Bras (lourd)',
+    type: 'push',
+    label: 'Dips FORCE + OHP Barre FORCE + Callisthénie',
     color: '#F59E0B',
     exercises: [
-      'OHP 2×3-5 @60-62.5kg',
-      'Row posé 2×5-6 + 1×12 @78/66kg',
-      'Curl barre 3×5-6 @45-47.5kg',
-      'Curl marteau 3×8-10 @20kg',
-      'Triceps OH / Skull 3×8-12 @40kg',
-      'Moto 3× @10kg',
+      'Dips lestés FORCE — objectif +102-105kg',
+      'OHP barre FORCE — objectif 65×3',
+      'Callisthénie — HSP 30 pompes mur / HS libre 15s+ / Planche adv tuck 5-8s',
     ],
   },
   {
     day: 'Dimanche',
     shortDay: 'Dim',
-    type: 'rest',
-    label: 'OFF / Mobilité',
-    color: '#A0A0A0',
-    exercises: ['Z2 40-60min ou OFF', 'Mobilité hanche + épaules', 'Récupération active'],
+    type: 'pull',
+    label: 'Bras + Row + Pompes lestées + EMOM/AMRAP',
+    color: '#A855F7',
+    exercises: [
+      'Renfo bras — curl barre 46kg, objectif +',
+      'Row barre 81kg volume',
+      'Pompes lestées',
+      'EMOM / AMRAP',
+      'Abdos',
+    ],
   },
 ];
 
 // ─── GOALS ────────────────────────────────────────────────────────────────────
 
 export const DAILY_GOALS = {
-  calories: 2500,
-  protein: 180,
-  carbs: 280,
-  fat: 70,
-  water: 3100, // ml — objectif Dimitri
+  calories: 2200,
+  protein: 140,
+  carbs: 275,
+  fat: 60,
+  water: 2600, // ml — objectif Dimitri sèche
 };
 
 // ─── WORKOUT_DAYS FOR CALENDAR (March 2026) ───────────────────────────────────

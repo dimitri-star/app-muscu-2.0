@@ -18,7 +18,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
-import { useWorkoutStore, useWaterStore, useProgramStore, useGamificationStore, getShortDayFromDate } from '../../store';
+import { useWorkoutStore, useWaterStore, useProgramStore, useGamificationStore, useChronoStore, getShortDayFromDate } from '../../store';
 import { weeklyProgram, exercisesDB } from '../../constants/mockData';
 import { PROGRAMME_API } from '../../constants/api';
 import type { WorkoutExercise, Exercise } from '../../constants/mockData';
@@ -989,11 +989,6 @@ const TIMER_PRESETS = [
   { label: '5 min', seconds: 300 },
 ];
 
-interface LapEntry {
-  id: number;
-  time: string;
-  split: string;
-}
 
 function getChronoStyles(colors: ThemeColors) {
   return StyleSheet.create({
@@ -1029,122 +1024,45 @@ function getChronoStyles(colors: ThemeColors) {
 
 function ChronoContent() {
   const [mode, setMode] = useState<ChronoMode>('chrono');
+  const [, setTick] = useState(0);
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const chronoStyles = useMemo(() => getChronoStyles(colors), [isDark]);
 
-  // Stopwatch
-  const [swRunning, setSwRunning] = useState(false);
-  const [swSeconds, setSwSeconds] = useState(0);
-  const [laps, setLaps] = useState<LapEntry[]>([]);
-  const swRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastLapRef = useRef(0);
+  const {
+    swRunning, swStartMs, swAccMs, swLaps, swStart, swPause, swReset, swLap,
+    timerPreset, timerRunning, timerEndMs, timerRemMs, timerSetPreset, timerStart, timerPause, timerReset,
+    reposRunning, reposEndMs, reposRemMs, reposStart, reposPause, reposReset,
+    tabataRunning, tabataIsWork, tabataPhaseEndMs, tabataPhaseRemMs, tabataRounds,
+    tabataStart, tabataPause, tabataReset, tabataCheckAdvance,
+  } = useChronoStore();
 
+  // Single ticker: re-renders display + handles auto-stop/advance
   useEffect(() => {
-    if (swRunning) {
-      swRef.current = setInterval(() => setSwSeconds((s) => s + 1), 1000);
-    } else {
-      if (swRef.current) clearInterval(swRef.current);
-    }
-    return () => { if (swRef.current) clearInterval(swRef.current); };
-  }, [swRunning]);
+    const id = setInterval(() => {
+      const s = useChronoStore.getState();
+      const now = Date.now();
+      if (s.timerRunning && s.timerEndMs != null && now >= s.timerEndMs) s.timerPause();
+      if (s.reposRunning && s.reposEndMs != null && now >= s.reposEndMs) s.reposPause();
+      if (s.tabataRunning) s.tabataCheckAdvance();
+      setTick((t) => (t + 1) % 1000);
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
 
-  const handleLap = () => {
-    const split = swSeconds - lastLapRef.current;
-    lastLapRef.current = swSeconds;
-    setLaps((prev) => [
-      { id: Date.now(), time: formatTime(swSeconds), split: formatTime(split) },
-      ...prev,
-    ]);
-  };
-
-  const handleSwReset = () => {
-    setSwRunning(false);
-    setSwSeconds(0);
-    setLaps([]);
-    lastLapRef.current = 0;
-  };
-
-  // Timer / Repos
-  const [timerPreset, setTimerPreset] = useState(60);
-  const [timerRemaining, setTimerRemaining] = useState(60);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const reposDefault = 90;
-  const [reposRemaining, setReposRemaining] = useState(reposDefault);
-  const [reposRunning, setReposRunning] = useState(false);
-  const reposRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Tabata
-  const TABATA_WORK = 20;
-  const TABATA_REST = 10;
-  const [tabataRunning, setTabataRunning] = useState(false);
-  const [tabataIsWork, setTabataIsWork] = useState(true);
-  const [tabataRemaining, setTabataRemaining] = useState(TABATA_WORK);
-  const [tabataRounds, setTabataRounds] = useState(0);
-  const tabataRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const tabataStateRef = useRef({ isWork: true, remaining: TABATA_WORK });
-
-  useEffect(() => {
-    if (tabataRunning) {
-      tabataRef.current = setInterval(() => {
-        tabataStateRef.current.remaining -= 1;
-        if (tabataStateRef.current.remaining <= 0) {
-          const nextIsWork = !tabataStateRef.current.isWork;
-          if (tabataStateRef.current.isWork) setTabataRounds((r) => r + 1);
-          tabataStateRef.current = { isWork: nextIsWork, remaining: nextIsWork ? TABATA_WORK : TABATA_REST };
-        }
-        setTabataIsWork(tabataStateRef.current.isWork);
-        setTabataRemaining(tabataStateRef.current.remaining);
-      }, 1000);
-    } else {
-      if (tabataRef.current) clearInterval(tabataRef.current);
-    }
-    return () => { if (tabataRef.current) clearInterval(tabataRef.current); };
-  }, [tabataRunning]);
-
-  const handleTabataReset = () => {
-    setTabataRunning(false);
-    setTabataIsWork(true);
-    setTabataRemaining(TABATA_WORK);
-    setTabataRounds(0);
-    tabataStateRef.current = { isWork: true, remaining: TABATA_WORK };
-  };
-
-  useEffect(() => {
-    if (timerRunning) {
-      timerRef.current = setInterval(() => {
-        setTimerRemaining((s) => {
-          if (s <= 1) {
-            setTimerRunning(false);
-            return 0;
-          }
-          return s - 1;
-        });
-      }, 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [timerRunning]);
-
-  useEffect(() => {
-    if (reposRunning) {
-      reposRef.current = setInterval(() => {
-        setReposRemaining((s) => {
-          if (s <= 1) {
-            setReposRunning(false);
-            return 0;
-          }
-          return s - 1;
-        });
-      }, 1000);
-    } else {
-      if (reposRef.current) clearInterval(reposRef.current);
-    }
-    return () => { if (reposRef.current) clearInterval(reposRef.current); };
-  }, [reposRunning]);
+  // Derive display values from timestamps (accurate even after app backgrounding)
+  const swElapsedSec = swRunning && swStartMs != null
+    ? Math.floor((swAccMs + (Date.now() - swStartMs)) / 1000)
+    : Math.floor(swAccMs / 1000);
+  const timerRemSec = timerRunning && timerEndMs != null
+    ? Math.max(0, Math.ceil((timerEndMs - Date.now()) / 1000))
+    : Math.ceil(timerRemMs / 1000);
+  const reposRemSec = reposRunning && reposEndMs != null
+    ? Math.max(0, Math.ceil((reposEndMs - Date.now()) / 1000))
+    : Math.ceil(reposRemMs / 1000);
+  const tabataRemSec = tabataRunning && tabataPhaseEndMs != null
+    ? Math.max(0, Math.ceil((tabataPhaseEndMs - Date.now()) / 1000))
+    : Math.ceil(tabataPhaseRemMs / 1000);
 
   const CHRONO_MODES: { key: ChronoMode; label: string }[] = [
     { key: 'chrono', label: 'Chrono' },
@@ -1156,11 +1074,7 @@ function ChronoContent() {
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={chronoStyles.container}>
       {/* Mode selector */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={chronoStyles.modeRow}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={chronoStyles.modeRow}>
         {CHRONO_MODES.map((m) => {
           const isActive = mode === m.key;
           return (
@@ -1180,36 +1094,31 @@ function ChronoContent() {
       {/* Stopwatch */}
       {mode === 'chrono' && (
         <View style={chronoStyles.watchContainer}>
-          <Text style={chronoStyles.bigTime}>{formatTime(swSeconds)}</Text>
+          <Text style={chronoStyles.bigTime}>{formatTime(swElapsedSec)}</Text>
           <View style={chronoStyles.btnRow}>
-            <TouchableOpacity
-              style={chronoStyles.grayBtn}
-              onPress={handleSwReset}
-            >
+            <TouchableOpacity style={chronoStyles.grayBtn} onPress={swReset}>
               <Text style={chronoStyles.grayBtnText}>Reinitialiser</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[chronoStyles.mainBtn, swRunning ? chronoStyles.orangeBtn : chronoStyles.greenBtn]}
-              onPress={() => setSwRunning((r) => !r)}
+              onPress={() => swRunning ? swPause() : swStart()}
             >
               <Text style={chronoStyles.mainBtnText}>{swRunning ? 'Pause' : 'Demarrer'}</Text>
             </TouchableOpacity>
             {swRunning && (
-              <TouchableOpacity style={chronoStyles.grayBtn} onPress={handleLap}>
+              <TouchableOpacity style={chronoStyles.grayBtn} onPress={swLap}>
                 <Text style={chronoStyles.grayBtnText}>Tour</Text>
               </TouchableOpacity>
             )}
           </View>
-
-          {/* Laps */}
-          {laps.length > 0 && (
+          {swLaps.length > 0 && (
             <View style={chronoStyles.lapsContainer}>
               <Text style={chronoStyles.lapsTitle}>Tours</Text>
-              {laps.map((lap, i) => (
+              {swLaps.map((lap, i) => (
                 <View key={lap.id} style={chronoStyles.lapRow}>
-                  <Text style={chronoStyles.lapNum}>Tour {laps.length - i}</Text>
-                  <Text style={chronoStyles.lapSplit}>{lap.split}</Text>
-                  <Text style={chronoStyles.lapTime}>{lap.time}</Text>
+                  <Text style={chronoStyles.lapNum}>Tour {swLaps.length - i}</Text>
+                  <Text style={chronoStyles.lapSplit}>{formatTime(lap.splitSec)}</Text>
+                  <Text style={chronoStyles.lapTime}>{formatTime(lap.elapsedSec)}</Text>
                 </View>
               ))}
             </View>
@@ -1220,54 +1129,27 @@ function ChronoContent() {
       {/* Timer */}
       {mode === 'timer' && (
         <View style={chronoStyles.watchContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={chronoStyles.presetRow}
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={chronoStyles.presetRow}>
             {TIMER_PRESETS.map((p) => (
               <TouchableOpacity
                 key={p.seconds}
-                style={[
-                  chronoStyles.presetPill,
-                  timerPreset === p.seconds && chronoStyles.presetPillActive,
-                ]}
-                onPress={() => {
-                  setTimerPreset(p.seconds);
-                  setTimerRemaining(p.seconds);
-                  setTimerRunning(false);
-                }}
+                style={[chronoStyles.presetPill, timerPreset === p.seconds && chronoStyles.presetPillActive]}
+                onPress={() => timerSetPreset(p.seconds)}
               >
-                <Text
-                  style={[
-                    chronoStyles.presetText,
-                    timerPreset === p.seconds && chronoStyles.presetTextActive,
-                  ]}
-                >
+                <Text style={[chronoStyles.presetText, timerPreset === p.seconds && chronoStyles.presetTextActive]}>
                   {p.label}
                 </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
-
-          <Text style={chronoStyles.bigTime}>{formatTime(timerRemaining)}</Text>
-
+          <Text style={chronoStyles.bigTime}>{formatTime(timerRemSec)}</Text>
           <View style={chronoStyles.btnRow}>
-            <TouchableOpacity
-              style={chronoStyles.grayBtn}
-              onPress={() => {
-                setTimerRunning(false);
-                setTimerRemaining(timerPreset);
-              }}
-            >
+            <TouchableOpacity style={chronoStyles.grayBtn} onPress={timerReset}>
               <Text style={chronoStyles.grayBtnText}>Reinitialiser</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[chronoStyles.mainBtn, timerRunning ? chronoStyles.orangeBtn : chronoStyles.greenBtn]}
-              onPress={() => {
-                if (timerRemaining === 0) setTimerRemaining(timerPreset);
-                setTimerRunning((r) => !r);
-              }}
+              onPress={() => timerRunning ? timerPause() : timerStart()}
             >
               <Text style={chronoStyles.mainBtnText}>{timerRunning ? 'Pause' : 'Demarrer'}</Text>
             </TouchableOpacity>
@@ -1278,23 +1160,14 @@ function ChronoContent() {
       {/* Repos */}
       {mode === 'repos' && (
         <View style={chronoStyles.watchContainer}>
-          <Text style={chronoStyles.bigTime}>{formatTime(reposRemaining)}</Text>
+          <Text style={chronoStyles.bigTime}>{formatTime(reposRemSec)}</Text>
           <View style={chronoStyles.btnRow}>
-            <TouchableOpacity
-              style={chronoStyles.grayBtn}
-              onPress={() => {
-                setReposRunning(false);
-                setReposRemaining(reposDefault);
-              }}
-            >
+            <TouchableOpacity style={chronoStyles.grayBtn} onPress={reposReset}>
               <Text style={chronoStyles.grayBtnText}>Reinitialiser</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[chronoStyles.mainBtn, reposRunning ? chronoStyles.orangeBtn : chronoStyles.greenBtn]}
-              onPress={() => {
-                if (reposRemaining === 0) setReposRemaining(reposDefault);
-                setReposRunning((r) => !r);
-              }}
+              onPress={() => reposRunning ? reposPause() : reposStart()}
             >
               <Text style={chronoStyles.mainBtnText}>{reposRunning ? 'Pause' : 'Demarrer'}</Text>
             </TouchableOpacity>
@@ -1310,16 +1183,16 @@ function ChronoContent() {
             {tabataIsWork ? 'EFFORT' : 'REPOS'} · Tour {tabataRounds + 1}
           </Text>
           <Text style={[chronoStyles.bigTime, { color: tabataIsWork ? colors.accent : colors.accentOrange }]}>
-            {formatTime(tabataRemaining)}
+            {formatTime(tabataRemSec)}
           </Text>
-          <Text style={chronoStyles.reposHint}>Tabata: {TABATA_WORK}s effort / {TABATA_REST}s repos</Text>
+          <Text style={chronoStyles.reposHint}>Tabata: 20s effort / 10s repos</Text>
           <View style={chronoStyles.btnRow}>
-            <TouchableOpacity style={chronoStyles.grayBtn} onPress={handleTabataReset}>
+            <TouchableOpacity style={chronoStyles.grayBtn} onPress={tabataReset}>
               <Text style={chronoStyles.grayBtnText}>Reinitialiser</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[chronoStyles.mainBtn, tabataRunning ? chronoStyles.orangeBtn : chronoStyles.greenBtn]}
-              onPress={() => setTabataRunning((r) => !r)}
+              onPress={() => tabataRunning ? tabataPause() : tabataStart()}
             >
               <Text style={chronoStyles.mainBtnText}>{tabataRunning ? 'Pause' : 'Demarrer'}</Text>
             </TouchableOpacity>
@@ -1666,10 +1539,19 @@ export default function SeanceScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <SubTabBar active={activeTab} onPress={setActiveTab} />
       <View style={styles.content}>
-        {activeTab === 'seance' && <SeanceContent />}
-        {activeTab === 'chrono' && <ChronoContent />}
-        {activeTab === 'eau' && <WaterContent />}
-        {activeTab === 'programme' && <ProgrammeContent onLaunch={() => setActiveTab('seance')} />}
+        {/* Keep all tabs mounted — display:none hides without unmounting, preserving state */}
+        <View style={{ flex: 1, display: activeTab === 'seance' ? 'flex' : 'none' }}>
+          <SeanceContent />
+        </View>
+        <View style={{ flex: 1, display: activeTab === 'chrono' ? 'flex' : 'none' }}>
+          <ChronoContent />
+        </View>
+        <View style={{ flex: 1, display: activeTab === 'eau' ? 'flex' : 'none' }}>
+          <WaterContent />
+        </View>
+        <View style={{ flex: 1, display: activeTab === 'programme' ? 'flex' : 'none' }}>
+          <ProgrammeContent onLaunch={() => setActiveTab('seance')} />
+        </View>
       </View>
     </SafeAreaView>
   );
