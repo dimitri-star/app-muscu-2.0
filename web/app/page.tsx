@@ -303,7 +303,7 @@ export default function DashboardPage() {
               <LineChart data={bodyWeightData}>
                 <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
                 <XAxis dataKey="date" stroke={MUTED} tick={{ fontSize: 10 }} />
-                <YAxis stroke={MUTED} tick={{ fontSize: 11 }} domain={[79, 84]} />
+                <YAxis stroke={MUTED} tick={{ fontSize: 11 }} domain={[65, 69]} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "#FFFFFF",

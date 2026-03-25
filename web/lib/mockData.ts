@@ -652,10 +652,50 @@ export const nutritionPlan = {
     {
       day: "Tous les jours",
       meals: [
-        { name: "Petit-déjeuner (7h30)", calories: 530, protein: 33, carbs: 55, fat: 20 },
-        { name: "Déjeuner (12h)", calories: 730, protein: 45, carbs: 95, fat: 12 },
-        { name: "Collation (15h30)", calories: 230, protein: 5, carbs: 35, fat: 8 },
-        { name: "Dîner (20h)", calories: 710, protein: 55, carbs: 70, fat: 20 },
+        {
+          name: "Petit-déjeuner (7h30)", calories: 530, protein: 33, carbs: 55, fat: 20,
+          items: [
+            { name: "Oeufs au plat", qty: "3 moyens", protein: 22, carbs: 1, fat: 18, calories: 245, note: "Cholestérol → testo" },
+            { name: "Fromage blanc 0%", qty: "150g", protein: 12, carbs: 6, fat: 0, calories: 75, note: "Caséine" },
+            { name: "Banane OU kiwi", qty: "1 pièce", protein: 1, carbs: 23, fat: 0, calories: 90, note: "Énergie matinale" },
+            { name: "Miel", qty: "8g", protein: 0, carbs: 6, fat: 0, calories: 24, note: "Sur le fromage blanc" },
+            { name: "Graines de chia", qty: "10g", protein: 2, carbs: 1, fat: 3, calories: 49, note: "Oméga 3, dans le FB" },
+            { name: "Fruits rouges surgelés", qty: "40g", protein: 0, carbs: 4, fat: 0, calories: 20, note: "Antioxydants" },
+          ],
+        },
+        {
+          name: "Déjeuner (12h00)", calories: 730, protein: 45, carbs: 95, fat: 12,
+          items: [
+            { name: "Dinde OU poulet CRU", qty: "180g", protein: 36, carbs: 0, fat: 4, calories: 180, note: "Boucher" },
+            { name: "Riz basmati CRU", qty: "90g", protein: 7, carbs: 70, fat: 1, calories: 310, note: "= ~250g cuit" },
+            { name: "Brocolis OU épinards", qty: "200g", protein: 5, carbs: 4, fat: 0, calories: 50, note: "Épinards = magnésium" },
+            { name: "Betteraves", qty: "100g", protein: 2, carbs: 10, fat: 0, calories: 43, note: "Nitrates → performance" },
+            { name: "Huile d'olive", qty: "5ml", protein: 0, carbs: 0, fat: 5, calories: 45, note: "Cuisson" },
+            { name: "Ail cru émincé", qty: "1 gousse (~3g)", protein: 0, carbs: 1, fat: 0, calories: 4, note: "Anti-cortisol, pro-testo" },
+            { name: "Oignon cru", qty: "30g", protein: 0, carbs: 3, fat: 0, calories: 14, note: "Antioxydants, pro-testo" },
+          ],
+        },
+        {
+          name: "Collation pré-training (15h30)", calories: 230, protein: 5, carbs: 35, fat: 8,
+          items: [
+            { name: "Banane", qty: "1 petite", protein: 1, carbs: 23, fat: 0, calories: 89, note: "Énergie rapide" },
+            { name: "Amandes", qty: "15g", protein: 3, carbs: 1, fat: 8, calories: 88, note: "Magnésium, zinc" },
+            { name: "Dattes (avant salle 17h15)", qty: "2 pièces", protein: 0, carbs: 12, fat: 0, calories: 56, note: "Sucre rapide" },
+          ],
+        },
+        {
+          name: "Dîner post-training (20h00)", calories: 710, protein: 55, carbs: 70, fat: 20,
+          items: [
+            { name: "Steak haché 5% OU cheval CRU", qty: "170g", protein: 33, carbs: 0, fat: 9, calories: 220, note: "Boucher, zinc, fer" },
+            { name: "Patate douce CRU", qty: "220g", protein: 3, carbs: 40, fat: 0, calories: 198, note: "IG modéré, vit A" },
+            { name: "Courgettes / asperges", qty: "200g", protein: 2, carbs: 5, fat: 0, calories: 35, note: "Asperges = drainage" },
+            { name: "Oeufs", qty: "2 moyens", protein: 11, carbs: 1, fat: 12, calories: 145, note: "--" },
+            { name: "Fromage blanc 0%", qty: "150g", protein: 12, carbs: 6, fat: 0, calories: 75, note: "Caséine nuit" },
+            { name: "Avocat (2-3×/sem)", qty: "1/2 (~60g)", protein: 1, carbs: 1, fat: 9, calories: 97, note: "Lipides sains, B6" },
+            { name: "Gingembre frais râpé", qty: "5g", protein: 0, carbs: 1, fat: 0, calories: 4, note: "Anti-inflammatoire" },
+            { name: "Chocolat noir 85%", qty: "10g", protein: 1, carbs: 2, fat: 4, calories: 58, note: "Magnésium, zinc, plaisir" },
+          ],
+        },
       ],
     },
   ],

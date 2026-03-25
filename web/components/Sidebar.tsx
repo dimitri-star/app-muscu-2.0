@@ -104,7 +104,7 @@ export default function Sidebar() {
           <div className="flex flex-col">
             <span className="text-sm font-semibold text-[#1A1A1A]">Dimitri A.</span>
             <span className="text-xs" style={{ color: "#666666" }}>
-              82 kg · PPL
+              66.5 kg · Bloc 1
             </span>
           </div>
         </div>

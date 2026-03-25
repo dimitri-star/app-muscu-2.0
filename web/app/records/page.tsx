@@ -49,10 +49,10 @@ export default function RecordsPage() {
       {/* Summary stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Bench Press", value: "120 kg", sub: "1RM" },
-          { label: "Squat", value: "140 kg", sub: "1RM" },
-          { label: "Deadlift", value: "160 kg", sub: "1RM" },
-          { label: "Total Powerlifting", value: "420 kg", sub: "SBD" },
+          { label: "Bench Barre", value: "125 kg", sub: "1RM estimé" },
+          { label: "Back Squat", value: "150 kg", sub: "1RM" },
+          { label: "Dips Lestés", value: "+100 kg", sub: "2 reps" },
+          { label: "Tractions", value: "+45 kg", sub: "1 rep" },
         ].map((stat) => (
           <Card
             key={stat.label}
