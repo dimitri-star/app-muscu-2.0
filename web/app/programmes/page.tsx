@@ -931,87 +931,263 @@ function CorrectifsTab() {
 
 // ─── Tab: Suivi Hebdo ─────────────────────────────────────────────────────────
 
-const SEMAINE_BLOC1 = [
-  { sem: 1, label: "S1", debut: "24 Mar", seances: ["Lun: Bench halt + Trac", "Mar: Run Z2", "Mer: Squat tech", "Jeu: Dips + Bench vol", "Ven: Run", "Sam: Dips FORCE + OHP", "Dim: Bras + Row"], done: [false, false, false, false, false, false, false] },
-  { sem: 2, label: "S2", debut: "31 Mar", seances: ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"], done: [false, false, false, false, false, false, false] },
-  { sem: 3, label: "S3", debut: "7 Avr", seances: ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"], done: [false, false, false, false, false, false, false] },
-  { sem: 4, label: "S4", debut: "14 Avr", seances: ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"], done: [false, false, false, false, false, false, false] },
+type HebdoMetric =
+  | "poids"
+  | "calories"
+  | "proteines"
+  | "eau"
+  | "sommeil"
+  | "energie"
+  | "training"
+  | "run"
+  | "rpe"
+  | "douleurs"
+  | "notes";
+
+type WeekCellState = Record<string, string>;
+
+const HEB_DO_STORAGE_KEY = "programme_suivi_hebdo_v2";
+const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+const WEEK_STARTS = ["24 Mar 2026", "31 Mar 2026", "07 Avr 2026", "14 Avr 2026"];
+const WEEK_STARTS_ISO = ["2026-03-24", "2026-03-31", "2026-04-07", "2026-04-14"];
+
+const METRICS: { key: HebdoMetric; label: string; unit?: string; numeric?: boolean }[] = [
+  { key: "poids", label: "Poids matin (kg)", unit: "kg", numeric: true },
+  { key: "calories", label: "Calories (FatSecret)", unit: "kcal", numeric: true },
+  { key: "proteines", label: "Protéines (g)", unit: "g", numeric: true },
+  { key: "eau", label: "Eau (L)", unit: "L", numeric: true },
+  { key: "sommeil", label: "Sommeil (h)", unit: "h", numeric: true },
+  { key: "energie", label: "Énergie (1-10)", unit: "/10", numeric: true },
+  { key: "training", label: "Training OK ? (O/N)" },
+  { key: "run", label: "Run km", unit: "km", numeric: true },
+  { key: "rpe", label: "RPE max", numeric: true },
+  { key: "douleurs", label: "Douleurs (0-10)", numeric: true },
+  { key: "notes", label: "Notes (texte libre)" },
 ];
 
-const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-const JOUR_COLORS = ["#4C9FFF", "#EF4444", "#F59E0B", "#9C27B0", "#EF4444", "#F59E0B", "#A855F7"];
+const numericMetrics: HebdoMetric[] = ["poids", "calories", "proteines", "eau", "sommeil", "energie"];
+
+const parseNum = (value: string): number | null => {
+  if (!value) return null;
+  const normalized = value.replace(",", ".").replace(/[^\d.-]/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatAverage = (metric: HebdoMetric, avg: number) => {
+  if (metric === "calories") return `${Math.round(avg)} kcal`;
+  if (metric === "proteines") return `${Math.round(avg)} g`;
+  if (metric === "eau") return `${avg.toFixed(1)} L`;
+  if (metric === "sommeil") return `${avg.toFixed(1)} h`;
+  if (metric === "energie") return `${avg.toFixed(1)} /10`;
+  return `${avg.toFixed(1)} kg`;
+};
 
 function SuiviTab() {
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const toggle = (key: string) => setChecked((p) => ({ ...p, [key]: !p[key] }));
+  const [cells, setCells] = useState<WeekCellState>({});
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HEB_DO_STORAGE_KEY);
+      if (raw) setCells(JSON.parse(raw));
+    } catch {
+      // ignore
+    }
+    fetch("/api/weekly-tracking")
+      .then((r) => r.json())
+      .then((rows: Array<Record<string, unknown>>) => {
+        if (!Array.isArray(rows)) return;
+        const next: WeekCellState = {};
+        rows.forEach((row) => {
+          const week = Number(row.semaine);
+          const jour = String(row.jour || "");
+          const day = JOURS.indexOf(jour);
+          if (!week || day < 0) return;
+          METRICS.forEach((m) => {
+            const raw = row[m.key];
+            if (raw !== null && raw !== undefined) {
+              next[`${week}_${m.key}_${day}`] = String(raw);
+            }
+          });
+        });
+        setCells((prev) => ({ ...prev, ...next }));
+      })
+      .catch(() => {});
+  }, []);
+
+  const setValue = (week: number, metric: HebdoMetric, day: number, value: string) => {
+    setCells((prev) => {
+      const key = `${week}_${metric}_${day}`;
+      const next = { ...prev, [key]: value };
+      try {
+        localStorage.setItem(HEB_DO_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    const payload: Record<string, string | number | boolean | null> = {
+      semaine: week,
+      jour: JOURS[day],
+      date: WEEK_STARTS_ISO[week - 1],
+    };
+    if (metric === "training") {
+      const v = value.trim().toLowerCase();
+      payload.training_ok = v === "o" || v === "ok" || v === "oui" || v === "y";
+    } else if (metric === "notes") {
+      payload.notes = value || null;
+    } else {
+      const n = parseNum(value);
+      payload[metric] = n;
+    }
+    fetch("/api/weekly-tracking", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  };
+
+  const getValue = (week: number, metric: HebdoMetric, day: number) => cells[`${week}_${metric}_${day}`] || "";
+
+  const buildWeekExport = (week: number) => {
+    const start = WEEK_STARTS[week - 1];
+    const endDate = new Date(start.replace("Avr", "Apr"));
+    endDate.setDate(endDate.getDate() + 6);
+    const end = endDate.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+
+    const chain = (metric: HebdoMetric, suffix = "") =>
+      JOURS.map((_, day) => getValue(week, metric, day) || "--").map((v) => `${v}${v === "--" ? "" : suffix}`).join(" → ");
+    const avg = (metric: HebdoMetric) => {
+      const vals = JOURS.map((_, day) => parseNum(getValue(week, metric, day))).filter((v): v is number => v !== null);
+      if (!vals.length) return "--";
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+      return formatAverage(metric, mean);
+    };
+
+    const runTotal = JOURS.map((_, day) => parseNum(getValue(week, "run", day)) || 0).reduce((a, b) => a + b, 0);
+    const trainingDone = JOURS.filter((_, day) => {
+      const v = getValue(week, "training", day).trim().toLowerCase();
+      return v === "o" || v === "ok" || v === "oui" || v === "y";
+    }).length;
+    const notesLine = JOURS.map((_, day) => getValue(week, "notes", day).trim()).filter(Boolean).join(" | ") || "--";
+
+    return `📊 SUIVI HEBDO — SEMAINE ${week} (${start} - ${end})
+
+POIDS : ${chain("poids")} | Moy: ${avg("poids")}
+CALORIES : ${chain("calories")} | Moy: ${avg("calories")}
+PROTEINES : ${chain("proteines")} | Moy: ${avg("proteines")}
+EAU : ${chain("eau")} | Moy: ${avg("eau")}
+SOMMEIL : ${chain("sommeil")} | Moy: ${avg("sommeil")}
+ÉNERGIE : ${chain("energie")} | Moy: ${avg("energie")}
+TRAINING : ${chain("training")} | ${trainingDone}/7
+RUN : ${chain("run", "km")} | Total: ${runTotal.toFixed(1)}km
+RPE MAX : ${chain("rpe")} |
+DOULEURS : ${chain("douleurs")} |
+NOTES : ${notesLine}`;
+  };
+
+  const exportWeek = async (week: number) => {
+    const content = buildWeekExport(week);
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(content);
+        return;
+      } catch {
+        // fallback below
+      }
+    }
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `suivi-hebdo-s${week}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-4">
-      <div className="p-4 rounded-xl" style={{ backgroundColor: "rgba(29,185,84,0.08)", border: "1px solid rgba(29,185,84,0.2)" }}>
-        <p className="text-sm text-green-700 font-medium">Coche chaque séance effectuée. Objectif : 7 séances / semaine.</p>
-      </div>
+      {Array.from({ length: 4 }, (_, idx) => idx + 1).map((week) => {
+        const totalCells = METRICS.length * JOURS.length;
+        const completed = METRICS.flatMap((m) => JOURS.map((_, d) => getValue(week, m.key, d))).filter((v) => v.trim() !== "").length;
+        const pct = Math.round((completed / totalCells) * 100);
 
-      {SEMAINE_BLOC1.map((sem) => {
-        const doneCount = JOURS.filter((_, i) => checked[`${sem.sem}-${i}`]).length;
-        const pct = Math.round((doneCount / 7) * 100);
+        const averages = numericMetrics
+          .map((metric) => {
+            const vals = JOURS.map((_, day) => parseNum(getValue(week, metric, day))).filter((v): v is number => v !== null);
+            if (!vals.length) return null;
+            const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+            return { metric, label: METRICS.find((m) => m.key === metric)?.label || metric, value: formatAverage(metric, mean) };
+          })
+          .filter(Boolean) as { metric: HebdoMetric; label: string; value: string }[];
+
         return (
-          <Card key={sem.sem} style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-3">
+          <Card key={week} style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-bold text-gray-900">{sem.label} — semaine du {sem.debut}</p>
-                  <p className="text-xs" style={{ color: MUTED }}>{doneCount}/7 séances</p>
+                  <p className="text-sm font-bold text-gray-900">S{week} — semaine du {WEEK_STARTS[week - 1]}</p>
+                  <p className="text-xs mt-0.5" style={{ color: MUTED }}>
+                    S{week} — {pct}% complété ({completed}/{totalCells} cases)
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Progress value={pct} className="w-24 h-2" style={{ backgroundColor: BORDER }} />
-                  <span className="text-xs font-bold" style={{ color: pct >= 80 ? ACCENT : MUTED }}>{pct}%</span>
+                  <Progress value={pct} className="w-28 h-2" style={{ backgroundColor: BORDER }} />
+                  <button
+                    onClick={() => exportWeek(week)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                    style={{ backgroundColor: ACCENT, color: "#FFFFFF" }}
+                  >
+                    Exporter la semaine
+                  </button>
                 </div>
               </div>
-              <div className="grid grid-cols-7 gap-1.5">
-                {JOURS.map((jour, i) => {
-                  const key = `${sem.sem}-${i}`;
-                  const isDone = checked[key];
-                  return (
-                    <button
-                      key={jour}
-                      onClick={() => toggle(key)}
-                      className="rounded-lg py-2 flex flex-col items-center gap-1 transition-all"
-                      style={{
-                        backgroundColor: isDone ? JOUR_COLORS[i] + "20" : "#F5F5F5",
-                        border: `1px solid ${isDone ? JOUR_COLORS[i] : BORDER}`,
-                      }}
-                    >
-                      <span className="text-xs font-bold" style={{ color: isDone ? JOUR_COLORS[i] : MUTED }}>{jour}</span>
-                      <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{ backgroundColor: isDone ? JOUR_COLORS[i] : BORDER }}>
-                        {isDone && <span className="text-white text-xs">✓</span>}
-                      </div>
-                    </button>
-                  );
-                })}
+
+              <div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${BORDER}` }}>
+                <table className="w-full min-w-[980px] text-xs">
+                  <thead>
+                    <tr style={{ backgroundColor: "#F8F8F8", borderBottom: `1px solid ${BORDER}` }}>
+                      <th className="text-left px-3 py-2.5 font-semibold sticky left-0 bg-[#F8F8F8] z-10" style={{ color: MUTED }}>Indicateur</th>
+                      {JOURS.map((jour) => (
+                        <th key={jour} className="text-center px-2 py-2.5 font-semibold" style={{ color: MUTED }}>{jour}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {METRICS.map((metric, mi) => (
+                      <tr key={metric.key} style={{ borderBottom: mi < METRICS.length - 1 ? `1px solid ${BORDER}` : "none" }}>
+                        <td className="px-3 py-2.5 font-medium text-gray-900 sticky left-0 bg-white z-10 min-w-[180px]">
+                          {metric.label}
+                        </td>
+                        {JOURS.map((_, dayIdx) => (
+                          <td key={`${metric.key}-${dayIdx}`} className="px-1.5 py-1.5">
+                            <input
+                              value={getValue(week, metric.key, dayIdx)}
+                              onChange={(e) => setValue(week, metric.key, dayIdx, e.target.value)}
+                              placeholder={metric.key === "training" ? "O/N" : metric.key === "notes" ? "..." : "--"}
+                              className="w-full rounded-md px-2 py-1.5 border outline-none focus:ring-1 text-xs"
+                              style={{ borderColor: BORDER, color: "#222", backgroundColor: "#FAFAFA" }}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              {JOURS.some((_, i) => checked[`${sem.sem}-${i}`]) && (
-                <div className="mt-3 space-y-1.5 border-t pt-3" style={{ borderColor: BORDER }}>
-                  <p className="text-xs font-medium text-gray-500 mb-2">Notes de séance :</p>
-                  {JOURS.map((jour, i) => {
-                    const key = `${sem.sem}-${i}`;
-                    if (!checked[key]) return null;
-                    return (
-                      <div key={key} className="flex items-center gap-2">
-                        <span className="text-xs font-bold w-8 flex-shrink-0" style={{ color: JOUR_COLORS[i] }}>{jour}</span>
-                        <input
-                          type="text"
-                          placeholder="Charge réelle, RPE, notes..."
-                          value={notes[key] || ''}
-                          onChange={(e) => setNotes((p) => ({ ...p, [key]: e.target.value }))}
-                          className="flex-1 text-xs px-2 py-1.5 rounded-lg border outline-none"
-                          style={{ borderColor: BORDER, color: '#333', backgroundColor: '#F8F8F8' }}
-                        />
-                      </div>
-                    );
-                  })}
+
+              <div className="rounded-xl p-3" style={{ border: `1px solid ${BORDER}`, backgroundColor: "#F9FAFB" }}>
+                <p className="text-xs font-bold mb-2" style={{ color: MUTED }}>Moyennes automatiques semaine</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {averages.map((row) => (
+                    <div key={row.metric} className="rounded-lg px-2.5 py-2" style={{ backgroundColor: "#FFFFFF", border: `1px solid ${BORDER}` }}>
+                      <p className="text-[11px]" style={{ color: MUTED }}>{row.label}</p>
+                      <p className="text-sm font-bold text-gray-900">{row.value}</p>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
             </CardContent>
           </Card>
         );

@@ -27,7 +27,11 @@ interface WaterState {
 }
 
 function getTodayStr(): string {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 // ISO date of the Monday of the current week
@@ -145,6 +149,10 @@ export interface CustomExercise {
   isCustom?: true;
 }
 
+function makeUid(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
 interface WorkoutState {
   isActive: boolean;
   workoutStartTime: number | null;
@@ -229,62 +237,74 @@ export const useWorkoutStore = create<WorkoutState>()(
       checkStaleWorkout: () => {
         const state = get();
         if (!state.isActive || !state.workoutStartTime) return;
-        const startDate = new Date(state.workoutStartTime).toISOString().split('T')[0];
+        const d = new Date(state.workoutStartTime);
+        const startDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         if (startDate !== getTodayStr()) {
           set({ isActive: false, workoutStartTime: null });
         }
       },
 
       toggleSetDone: (exerciseId, setId) =>
-        set((state) => ({
-          exercises: state.exercises.map((ex) =>
-            ex.id === exerciseId
-              ? { ...ex, sets: ex.sets.map((s) => s.id === setId ? { ...s, done: !s.done } : s) }
-              : ex
-          ),
-        })),
+        set((state) => {
+          const exIndex = state.exercises.findIndex((ex) => ex.id === exerciseId);
+          if (exIndex === -1) return state;
+          const nextExercises = [...state.exercises];
+          const target = nextExercises[exIndex];
+          nextExercises[exIndex] = {
+            ...target,
+            sets: target.sets.map((s) => (s.id === setId ? { ...s, done: !s.done } : s)),
+          };
+          return { exercises: nextExercises };
+        }),
 
       updateSet: (exerciseId, setId, field, value) =>
-        set((state) => ({
-          exercises: state.exercises.map((ex) =>
-            ex.id === exerciseId
-              ? { ...ex, sets: ex.sets.map((s) => s.id === setId ? { ...s, [field]: value } : s) }
-              : ex
-          ),
-        })),
+        set((state) => {
+          const exIndex = state.exercises.findIndex((ex) => ex.id === exerciseId);
+          if (exIndex === -1) return state;
+          const nextExercises = [...state.exercises];
+          const target = nextExercises[exIndex];
+          nextExercises[exIndex] = {
+            ...target,
+            sets: target.sets.map((s) => (s.id === setId ? { ...s, [field]: value } : s)),
+          };
+          return { exercises: nextExercises };
+        }),
 
       addSet: (exerciseId) =>
-        set((state) => ({
-          exercises: state.exercises.map((ex) => {
-            if (ex.id !== exerciseId) return ex;
-            const lastSet = ex.sets[ex.sets.length - 1];
-            const newSet: WorkoutSet = {
-              id: `set_${Date.now()}`,
-              reps: lastSet?.reps ?? 10,
-              weight: lastSet?.weight ?? 0,
-              done: false,
-            };
-            return { ...ex, sets: [...ex.sets, newSet] };
-          }),
-        })),
+        set((state) => {
+          const exIndex = state.exercises.findIndex((ex) => ex.id === exerciseId);
+          if (exIndex === -1) return state;
+          const nextExercises = [...state.exercises];
+          const target = nextExercises[exIndex];
+          const lastSet = target.sets[target.sets.length - 1];
+          const newSet: WorkoutSet = {
+            id: makeUid('set'),
+            reps: lastSet?.reps ?? 10,
+            weight: lastSet?.weight ?? 0,
+            done: false,
+          };
+          nextExercises[exIndex] = { ...target, sets: [...target.sets, newSet] };
+          return { exercises: nextExercises };
+        }),
 
       removeSet: (exerciseId, setId) =>
-        set((state) => ({
-          exercises: state.exercises.map((ex) =>
-            ex.id === exerciseId
-              ? { ...ex, sets: ex.sets.filter((s) => s.id !== setId) }
-              : ex
-          ),
-        })),
+        set((state) => {
+          const exIndex = state.exercises.findIndex((ex) => ex.id === exerciseId);
+          if (exIndex === -1) return state;
+          const nextExercises = [...state.exercises];
+          const target = nextExercises[exIndex];
+          nextExercises[exIndex] = { ...target, sets: target.sets.filter((s) => s.id !== setId) };
+          return { exercises: nextExercises };
+        }),
 
       addExercise: (exercise) =>
         set((state) => ({
           exercises: [
             ...state.exercises,
             {
-              id: `ex_${Date.now()}`,
+              id: makeUid('ex'),
               exercise,
-              sets: [{ id: `set_${Date.now()}`, reps: 10, weight: 0, done: false }],
+              sets: [{ id: makeUid('set'), reps: 10, weight: 0, done: false }],
               restTime: 90,
               notes: '',
             },
@@ -293,16 +313,15 @@ export const useWorkoutStore = create<WorkoutState>()(
 
       addExerciseFromProgram: (exercise, numSets, reps, restTime, notes = '') =>
         set((state) => {
-          const ts = Date.now();
-          const rand = Math.random().toString(36).slice(2, 7);
+          const exId = makeUid('ex');
           return {
             exercises: [
               ...state.exercises,
               {
-                id: `ex_${ts}_${rand}`,
+                id: exId,
                 exercise,
                 sets: Array.from({ length: numSets }, (_, i) => ({
-                  id: `set_${ts}_${rand}_${i}`,
+                  id: makeUid(`set_${i}`),
                   reps,
                   weight: 0,
                   done: false,
@@ -327,18 +346,22 @@ export const useWorkoutStore = create<WorkoutState>()(
         })),
 
       updateRestTime: (exerciseId, restTime) =>
-        set((state) => ({
-          exercises: state.exercises.map((ex) =>
-            ex.id === exerciseId ? { ...ex, restTime } : ex
-          ),
-        })),
+        set((state) => {
+          const exIndex = state.exercises.findIndex((ex) => ex.id === exerciseId);
+          if (exIndex === -1) return state;
+          const nextExercises = [...state.exercises];
+          nextExercises[exIndex] = { ...nextExercises[exIndex], restTime };
+          return { exercises: nextExercises };
+        }),
 
       updateNotes: (exerciseId, notes) =>
-        set((state) => ({
-          exercises: state.exercises.map((ex) =>
-            ex.id === exerciseId ? { ...ex, notes } : ex
-          ),
-        })),
+        set((state) => {
+          const exIndex = state.exercises.findIndex((ex) => ex.id === exerciseId);
+          if (exIndex === -1) return state;
+          const nextExercises = [...state.exercises];
+          nextExercises[exIndex] = { ...nextExercises[exIndex], notes };
+          return { exercises: nextExercises };
+        }),
 
       startRestTimer: (seconds) =>
         set({ restTimerActive: true, restTimerSeconds: seconds, restTimerTotal: seconds }),
@@ -439,6 +462,8 @@ export interface ProgramExercise {
   name: string;
   sets: string;
   rest: string;
+  targetSets?: number;
+  targetReps?: number;
 }
 
 export type DayType = 'push' | 'pull' | 'legs' | 'rest' | 'cardio' | 'full';

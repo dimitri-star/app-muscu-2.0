@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -85,6 +85,27 @@ export default function ParametresPage() {
   const [measurements, setMeasurements] = useState(stored.measurements);
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((p) => {
+        if (!p) return;
+        setProfile({
+          name: p.nom ?? stored.name,
+          age: String(p.age ?? stored.age),
+          height: String(p.taille_cm ?? stored.height),
+          weight: String(p.poids_kg ?? stored.weight),
+        });
+        setMacros({
+          kcal: p.calories_cible ?? stored.macros.kcal,
+          protein: p.proteines_cible ?? stored.macros.protein,
+          fat: p.lipides_cible ?? stored.macros.fat,
+          carbs: p.glucides_cible ?? stored.macros.carbs,
+        });
+      })
+      .catch(() => {});
+  }, [stored.age, stored.height, stored.macros.carbs, stored.macros.fat, stored.macros.kcal, stored.macros.protein, stored.name, stored.weight]);
+
   function handleSave() {
     saveToStore({
       name: profile.name,
@@ -96,6 +117,20 @@ export default function ParametresPage() {
       waterGoal: water,
       measurements,
     });
+    fetch("/api/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nom: profile.name,
+        age: Number(profile.age),
+        taille_cm: Number(profile.height),
+        poids_kg: Number(profile.weight),
+        calories_cible: macros.kcal,
+        proteines_cible: macros.protein,
+        lipides_cible: macros.fat,
+        glucides_cible: macros.carbs,
+      }),
+    }).catch(() => {});
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }

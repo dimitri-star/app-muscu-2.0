@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
 import { personalRecords, userProfile, MARCH_2026_WORKOUT_DAYS } from '../../constants/mockData';
+import { PROFILE_API, RECORDS_API } from '../../constants/api';
 import SettingsScreen from '../../components/SettingsScreen';
 import { useGamificationStore, useWorkoutStore } from '../../store';
 
@@ -34,6 +35,14 @@ const PROFIL_TABS: { key: ProfilTab; label: string }[] = [
 
 // Real PRs from mockData (via import)
 const PERSONAL_RECORDS = personalRecords;
+type RemoteRecord = {
+  id: string;
+  exercice: string;
+  groupe: string;
+  poids: number;
+  reps: number;
+  date: string;
+};
 
 const PROGRAMS = [
   { id: 'p1', name: 'Bloc Force 6 semaines', duration: '6 jours/sem', split: '8 fév → 21 mars 2026 · S5 Réalisation', active: true },
@@ -61,10 +70,17 @@ function getSubStyles(colors: ThemeColors) {
       borderBottomColor: colors.separator,
     },
     row: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-    pill: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: 'transparent' },
-    pillActive: { backgroundColor: colors.text },
+    pill: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 18,
+      backgroundColor: colors.cardAlt,
+      borderWidth: 1,
+      borderColor: 'transparent',
+    },
+    pillActive: { backgroundColor: colors.accent },
     pillText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
-    pillTextActive: { color: colors.background, fontWeight: '600' },
+    pillTextActive: { color: '#FFFFFF', fontWeight: '600' },
   });
 }
 
@@ -93,9 +109,15 @@ function getHeaderStyles(colors: ThemeColors) {
     container: {
       paddingHorizontal: 16,
       paddingTop: 16,
-      paddingBottom: 12,
+      paddingBottom: 14,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.separator,
+      backgroundColor: colors.card,
+      borderRadius: 22,
+      marginHorizontal: 12,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     avatarRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, marginBottom: 14 },
     avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.cardAlt },
@@ -111,14 +133,14 @@ function getHeaderStyles(colors: ThemeColors) {
     xpFill: { height: 8, borderRadius: 4, backgroundColor: colors.accent },
     // Streak mini-cards
     streakRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-    streakCard: { flex: 1, backgroundColor: colors.card, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-    streakVal: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 1 },
+    streakCard: { flex: 1, backgroundColor: colors.cardAlt, borderRadius: 14, paddingVertical: 10, alignItems: 'center' },
+    streakVal: { color: colors.accent, fontSize: 18, fontWeight: '800', marginBottom: 1 },
     streakLbl: { color: colors.textSecondary, fontSize: 11 },
-    editBtn: { borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-    editBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    editBtn: { borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.accentMuted, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+    editBtnText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
     // Edit modal styles
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-    modalCard: { backgroundColor: colors.card, borderRadius: 16, padding: 24, width: '100%' },
+    modalCard: { backgroundColor: colors.card, borderRadius: 22, padding: 24, width: '100%', borderWidth: 1, borderColor: colors.border },
     modalTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 20, textAlign: 'center' },
     inputLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
     input: {
@@ -158,6 +180,16 @@ function ProfileHeader() {
   const [displayName, setDisplayName] = useState(userProfile.name);
   const [displayUsername, setDisplayUsername] = useState(userProfile.username);
   const [displayBio, setDisplayBio] = useState(userProfile.bio);
+
+  useEffect(() => {
+    fetch(PROFILE_API)
+      .then((r) => r.json())
+      .then((p) => {
+        if (!p) return;
+        if (p.nom) setDisplayName(p.nom);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleOpenEdit = () => {
     setEditName(displayName);
@@ -315,9 +347,9 @@ function getStatsStyles(colors: ThemeColors) {
   return StyleSheet.create({
     periodRow: { gap: 8, marginBottom: 16, paddingHorizontal: 4 },
     periodPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.card },
-    periodPillActive: { backgroundColor: colors.text },
+    periodPillActive: { backgroundColor: colors.accent },
     periodText: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
-    periodTextActive: { color: colors.background, fontWeight: '600' },
+    periodTextActive: { color: '#FFFFFF', fontWeight: '600' },
     grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
     gridCard: { width: '47.5%', backgroundColor: colors.card, borderRadius: 12, padding: 16 },
     gridValue: { color: colors.text, fontSize: 24, fontWeight: '800', marginBottom: 2 },
@@ -478,10 +510,21 @@ function PRContent() {
   const colors = getColors(isDark);
   const tabStyles = useMemo(() => getTabStyles(colors), [isDark]);
   const prStyles = useMemo(() => getPrStyles(colors), [isDark]);
+  const [records, setRecords] = useState<RemoteRecord[]>([]);
+
+  useEffect(() => {
+    fetch(RECORDS_API)
+      .then((r) => r.json())
+      .then((d) => setRecords(Array.isArray(d) ? d : []))
+      .catch(() => setRecords([]));
+  }, []);
   return (
     <ScrollView contentContainerStyle={tabStyles.container}>
       <Text style={prStyles.sectionTitle}>Records personnels</Text>
-      {PERSONAL_RECORDS.map((pr) => (
+      {(records.length
+        ? records.map((r) => ({ id: r.id, exercise: r.exercice, weight: r.poids, reps: r.reps, date: r.date }))
+        : PERSONAL_RECORDS
+      ).map((pr) => (
         <View key={pr.id} style={prStyles.prCard}>
           <View style={prStyles.prLeft}>
             <Text style={prStyles.prExercise}>{pr.exercise}</Text>
@@ -559,10 +602,10 @@ function getCalStyles(colors: ThemeColors) {
     weekDay: { flex: 1, textAlign: 'center', color: colors.textSecondary, fontSize: 12, fontWeight: '600', paddingVertical: 4 },
     dayCell: { flex: 1, alignItems: 'center', paddingVertical: 4 },
     dayBadge: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-    dayBadgeWorkout: { backgroundColor: colors.text },
+    dayBadgeWorkout: { backgroundColor: colors.accent },
     dayBadgeSelected: { backgroundColor: colors.accent },
     dayText: { color: colors.textSecondary, fontSize: 14, fontWeight: '400' },
-    dayTextWorkout: { color: colors.background, fontWeight: '700' },
+    dayTextWorkout: { color: '#FFFFFF', fontWeight: '700' },
     dayTextSelected: { color: '#fff', fontWeight: '700' },
     legend: { flexDirection: 'row', gap: 20, marginTop: 16, justifyContent: 'center' },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -690,7 +733,7 @@ function CalendrierContent() {
       ))}
       <View style={calStyles.legend}>
         <View style={calStyles.legendItem}>
-          <View style={[calStyles.legendDot, { backgroundColor: colors.text }]} />
+          <View style={[calStyles.legendDot, { backgroundColor: colors.accent }]} />
           <Text style={calStyles.legendText}>Jour d'entrainement</Text>
         </View>
         <View style={calStyles.legendItem}>

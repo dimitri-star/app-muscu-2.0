@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import DebugRuntimeProbe from "@/components/DebugRuntimeProbe";
 
 const poppins = Poppins({
   variable: "--font-app",
@@ -27,6 +28,7 @@ export default function RootLayout({
         className="antialiased"
         style={{ backgroundColor: "#FFFFFF" }}
       >
+        <DebugRuntimeProbe />
         <div className="flex min-h-screen">
           <Sidebar />
           <main

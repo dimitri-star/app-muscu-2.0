@@ -5,7 +5,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dumbbell, Clock, Weight, LayoutGrid, List, ChevronDown, Download, Smartphone, Trash2 } from "lucide-react";
-import { allWorkouts } from "@/lib/mockData";
 import type { SavedSeance } from "@/lib/seanceState";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -44,7 +43,7 @@ function seanceToDisplayWorkout(s: SavedSeance) {
     .slice(0, 3)
     .map((ex) => {
       const doneSet = ex.sets.find((set) => set.done && set.weight > 0);
-      return doneSet ? `${ex.name} ${doneSet.weight}kg` : ex.name;
+      return doneSet ? `${ex.name} ${doneSet.weight}kg x${doneSet.reps}` : ex.name;
     });
   return {
     id: s.id,
@@ -88,20 +87,6 @@ const MUTED = "#888888";
 
 const muscleGroups = ["Tous", "Poitrine", "Dos", "Jambes", "Épaules", "Bras", "Cardio", "Full Body"];
 
-// Convert static mock workouts to same shape
-const STATIC_WORKOUTS = allWorkouts.map((w) => ({
-  id: String(w.id),
-  title: w.title,
-  date: w.date,
-  isoDate: w.date,
-  duration: w.duration,
-  volume: w.volume,
-  exerciseCount: w.exerciseCount,
-  muscleGroup: w.muscleGroup,
-  topExercises: w.topExercises,
-  source: "web" as const,
-}));
-
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function EntrainementsPage() {
@@ -111,15 +96,19 @@ export default function EntrainementsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/seances")
-      .then((r) => r.json())
-      .then((data: SavedSeance[]) => {
-        if (Array.isArray(data)) {
-          setApiSeances(data.map(seanceToDisplayWorkout));
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const load = () =>
+      fetch("/api/seances")
+        .then((r) => r.json())
+        .then((data: SavedSeance[]) => {
+          if (Array.isArray(data)) {
+            setApiSeances(data.map(seanceToDisplayWorkout));
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    load();
+    const id = setInterval(load, 10000);
+    return () => clearInterval(id);
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -128,8 +117,7 @@ export default function EntrainementsPage() {
     setApiSeances((prev) => prev.filter((s) => s.id !== id));
   };
 
-  // Merge API sessions (newest first) with static mock data
-  const allDisplayWorkouts = [...apiSeances, ...STATIC_WORKOUTS];
+  const allDisplayWorkouts = [...apiSeances];
 
   const filtered =
     selectedMuscle === "Tous"
@@ -168,7 +156,7 @@ export default function EntrainementsPage() {
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ backgroundColor: "rgba(29,185,84,0.06)", border: "1px solid rgba(29,185,84,0.2)" }}>
           <Smartphone className="w-4 h-4 flex-shrink-0" style={{ color: ACCENT }} />
           <p className="text-sm" style={{ color: "#1A5C35" }}>
-            Tes séances mobiles apparaîtront ici automatiquement après enregistrement. API : <code className="px-1 py-0.5 rounded text-xs" style={{ backgroundColor: "rgba(29,185,84,0.15)" }}>/api/seances</code>
+            Aucune séance enregistrée pour le moment. Enregistre une séance mobile pour la voir ici. API : <code className="px-1 py-0.5 rounded text-xs" style={{ backgroundColor: "rgba(29,185,84,0.15)" }}>/api/seances</code>
           </p>
         </div>
       )}

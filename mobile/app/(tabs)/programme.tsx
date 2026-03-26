@@ -690,7 +690,7 @@ export default function ProgrammeScreen() {
         {/* ── Recent Sessions ── */}
         <Text style={[s.sectionTitle, { marginTop: 8 }]}>Séances récentes</Text>
         {savedWorkouts.slice(0, 3).map((workout, i) => {
-          const sessionColors = [colors.info, colors.accent, colors.orange];
+          const sessionColors = [colors.accent, '#17A94D', '#139143'];
           const c = sessionColors[i % sessionColors.length];
           return (
             <View key={workout.id} style={[s.sessionCard, { borderLeftColor: c }]}>

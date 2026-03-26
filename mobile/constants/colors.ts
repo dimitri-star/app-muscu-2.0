@@ -6,7 +6,7 @@ const Colors = {
   cardSecondary: '#1C1C1E',
 
   // Accents
-  accent: '#22C55E',
+  accent: '#1DB954',
   accentOrange: '#FF6B35',
   accentYellowGreen: '#A3E635',
 
@@ -34,7 +34,7 @@ const Colors = {
   tagBlueBg: '#1E3A5F',
   tagBlueText: '#3B82F6',
   tagGreenBg: '#1A3A2A',
-  tagGreenText: '#22C55E',
+  tagGreenText: '#1DB954',
 
   // Slider
   sliderActive: '#F59E0B',
@@ -53,21 +53,21 @@ const Colors = {
   overlay: 'rgba(0, 0, 0, 0.6)',
   // Old color names referenced in nutrition.tsx / programme.tsx
   cardElevated: '#2C2C2E',
-  accentDark: '#16A34A',
-  accentMuted: 'rgba(34, 197, 94, 0.12)',
+  accentDark: '#169C47',
+  accentMuted: 'rgba(29, 185, 84, 0.14)',
   error: '#FF3B30',
   info: '#3B82F6',
   orange: '#FF6B35',
   purple: '#7C4DFF',
   pink: '#FF4F9A',
   warning: '#F59E0B',
-  success: '#22C55E',
+  success: '#1DB954',
   borderLight: '#3A3A3C',
   inputBackground: '#2C2C2E',
 };
 
 export const MacroColors = {
-  calories: '#22C55E',
+  calories: '#1DB954',
   protein: '#3B82F6',
   carbs: '#FF6B35',
   fat: '#EF4444',

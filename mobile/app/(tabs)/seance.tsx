@@ -20,7 +20,7 @@ import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
 import { useWorkoutStore, useWaterStore, useProgramStore, useGamificationStore, useChronoStore, getShortDayFromDate } from '../../store';
 import { weeklyProgram, exercisesDB } from '../../constants/mockData';
-import { PROGRAMME_API } from '../../constants/api';
+import { PROGRAMME_API, SEANCES_API } from '../../constants/api';
 import type { WorkoutExercise, Exercise } from '../../constants/mockData';
 import StartWorkoutModal from '../../components/StartWorkoutModal';
 import ExerciseSearchModal from '../../components/ExerciseSearchModal';
@@ -60,6 +60,17 @@ function parseProgramSets(setsStr: string): { numSets: number; reps: number } {
   const m = setsStr.match(/(\d+)\s*[x×]\s*(\d+)/i);
   if (!m) return { numSets: 3, reps: 8 };
   return { numSets: parseInt(m[1], 10), reps: parseInt(m[2], 10) };
+}
+
+function resolveProgramPrescription(ex: {
+  sets: string;
+  targetSets?: number;
+  targetReps?: number;
+}): { numSets: number; reps: number } {
+  if (typeof ex.targetSets === 'number' && typeof ex.targetReps === 'number') {
+    return { numSets: ex.targetSets, reps: ex.targetReps };
+  }
+  return parseProgramSets(ex.sets);
 }
 
 // Parse "3min", "2-3min", "90s", "120" → seconds
@@ -322,11 +333,33 @@ function getActiveStyles(colors: ThemeColors) {
     timerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     timer: { color: colors.accentOrange, fontSize: 20, fontWeight: '700', fontVariant: ['tabular-nums'] },
     workoutName: { color: colors.text, fontSize: 20, fontWeight: '700', paddingHorizontal: 16, marginBottom: 12 },
-    scrollContent: { paddingHorizontal: 16, paddingBottom: 20 },
-    addExContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: Platform.OS === 'ios' ? 16 : 12, paddingTop: 10, backgroundColor: colors.background, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
-    addExBtn: { backgroundColor: colors.cta, borderRadius: 12, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-    addExText: { color: colors.ctaText, fontSize: 16, fontWeight: '700' },
-    restBubble: { position: 'absolute', bottom: 90, right: 20, width: 72, height: 72, borderRadius: 36, backgroundColor: colors.accentYellowGreen, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+    // Keep enough space so the add button is never hidden behind the floating tab bar.
+    scrollContent: { paddingHorizontal: 16, paddingBottom: Platform.OS === 'ios' ? 210 : 188 },
+    addExContainer: {
+      position: 'absolute',
+      bottom: Platform.OS === 'ios' ? 104 : 90,
+      left: 0,
+      right: 0,
+      paddingHorizontal: 16,
+      paddingBottom: Platform.OS === 'ios' ? 12 : 10,
+      paddingTop: 10,
+      backgroundColor: colors.background,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.separator,
+    },
+    addExBtn: {
+      backgroundColor: colors.accentMuted,
+      borderRadius: 12,
+      paddingVertical: 14,
+      borderWidth: 1,
+      borderColor: `${colors.accent}55`,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    addExText: { color: colors.accent, fontSize: 16, fontWeight: '700' },
+    restBubble: { position: 'absolute', bottom: Platform.OS === 'ios' ? 188 : 172, right: 20, width: 72, height: 72, borderRadius: 36, backgroundColor: colors.accentYellowGreen, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
     restBubbleTime: { color: colors.background, fontSize: 14, fontWeight: '800' },
     restBubbleLabel: { color: colors.background, fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
   });
@@ -377,7 +410,7 @@ function SeanceContent() {
     checkStaleWorkout,
   } = useWorkoutStore();
 
-  const { workoutStreakWeeks, workoutStreakTarget, workoutsThisWeek, setStreakTarget, checkAndResetWeekly } = useGamificationStore();
+  const { workoutStreakWeeks, workoutStreakDays, workoutStreakTarget, workoutsThisWeek, setStreakTarget, checkAndResetWeekly, completeWorkout, lastWorkoutDate } = useGamificationStore();
   const [showObjectivesInStreak, setShowObjectivesInStreak] = useState(false);
 
   // Check daily/weekly resets on focus
@@ -385,7 +418,13 @@ function SeanceContent() {
     useCallback(() => {
       checkAndResetWeekly();
       checkStaleWorkout();
-    }, [])
+      const today = toDateStr(new Date());
+      const hasTodayWorkout = savedWorkouts.some((w) => w.date === today);
+      // Backfill streak state for workouts saved before streak hook was wired.
+      if (hasTodayWorkout && lastWorkoutDate !== today) {
+        completeWorkout();
+      }
+    }, [checkAndResetWeekly, checkStaleWorkout, savedWorkouts, lastWorkoutDate, completeWorkout])
   );
 
   const [, forceUpdate] = useReducer((x) => x + 1, 0);
@@ -434,19 +473,25 @@ function SeanceContent() {
     setShowStartModal(false);
   };
 
-  const handleStartFromProgram = () => {
+  const { program: webProgram, fetchProgram } = useProgramStore();
+  const { addExerciseFromProgram } = useWorkoutStore();
+
+  const handleStartFromProgram = async () => {
     setShowStartModal(false);
+    await fetchProgram(PROGRAMME_API);
     setShowDayPicker(true);
   };
 
-  const { program: webProgram } = useProgramStore();
-  const { addExerciseFromProgram } = useWorkoutStore();
+  const handleSelectDay = async (dayIndex: number) => {
+    if (!useProgramStore.getState().program) {
+      await fetchProgram(PROGRAMME_API);
+    }
 
-  const handleSelectDay = (dayIndex: number) => {
     clearExercises();
     startWorkout();
 
-    const webDay = webProgram?.days[dayIndex];
+    const latestWebProgram = useProgramStore.getState().program;
+    const webDay = latestWebProgram?.days[dayIndex];
     const localDay = weeklyProgram[dayIndex];
     const isRest = webDay ? webDay.type === 'rest' : localDay.type === 'rest';
 
@@ -454,7 +499,7 @@ function SeanceContent() {
       if (webDay && webDay.exercises.length > 0) {
         webDay.exercises.forEach((ex) => {
           const exercise = resolveExercise(ex.name);
-          const { numSets, reps } = parseProgramSets(ex.sets);
+          const { numSets, reps } = resolveProgramPrescription(ex);
           const restTime = parseProgramRest(ex.rest);
           addExerciseFromProgram(exercise, numSets, reps, restTime, `${ex.sets} — repos ${ex.rest}`);
         });
@@ -477,10 +522,27 @@ function SeanceContent() {
     addExercise(exercise);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     saveWorkout({ name: workoutName, duration: elapsedSeconds, exercises });
+    completeWorkout();
+    try {
+      await fetch(SEANCES_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: `mobile_${Date.now()}`,
+          name: workoutName,
+          date: new Date().toISOString().split('T')[0],
+          duration: Math.max(1, Math.round(elapsedSeconds / 60)),
+          source: 'mobile',
+          exercises,
+        }),
+      });
+    } catch {
+      // Keep local save even if sync fails
+    }
     setShowSaveModal(false);
-    Alert.alert('Séance enregistrée !', 'Bravo, ta séance a été ajoutée à ton historique.');
+    Alert.alert('Séance enregistrée !', 'Séance sauvegardée en local et synchronisée vers le web si dispo.');
   };
 
   if (!isActive) {
@@ -503,7 +565,7 @@ function SeanceContent() {
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 }}>
             <TouchableOpacity onPress={() => setShowStreakModal(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Text style={{ fontSize: 22 }}>🔥</Text>
-              <Text style={{ color: '#FF6B35', fontSize: 15, fontWeight: '800' }}>{workoutStreakWeeks}</Text>
+              <Text style={{ color: colors.accent, fontSize: 15, fontWeight: '800' }}>{workoutStreakDays}</Text>
             </TouchableOpacity>
             <Text style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>Entraînements</Text>
             <TouchableOpacity onPress={() => setShowCalendarModal(true)}>
@@ -528,7 +590,7 @@ function SeanceContent() {
                   </Text>
                   <View style={{
                     width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
-                    backgroundColor: isToday ? '#FF3B30' : 'transparent',
+                    backgroundColor: isToday ? colors.accent : 'transparent',
                   }}>
                     <Text style={{
                       fontSize: 14, fontWeight: isToday ? '800' : '500',
@@ -552,11 +614,11 @@ function SeanceContent() {
               {motivMsg}
             </Text>
             <TouchableOpacity
-              style={{ backgroundColor: '#FFFFFF', borderRadius: 12, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              style={{ backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               onPress={() => setShowStartModal(true)}
             >
-              <Ionicons name="play" size={16} color="#000000" />
-              <Text style={{ color: '#000000', fontSize: 16, fontWeight: '700' }}>Commencer un entraînement</Text>
+              <Ionicons name="play" size={16} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700' }}>Commencer un entraînement</Text>
             </TouchableOpacity>
           </View>
 
@@ -624,7 +686,7 @@ function SeanceContent() {
           >
             <TouchableOpacity
               activeOpacity={1}
-              style={{ backgroundColor: '#E8511A', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 28, paddingTop: 16, paddingBottom: 48 }}
+              style={{ backgroundColor: colors.accent, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 28, paddingTop: 16, paddingBottom: 48 }}
               onPress={() => {}}
             >
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)', alignSelf: 'center', marginBottom: 20 }} />
@@ -639,7 +701,7 @@ function SeanceContent() {
               <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 24 }}>
                 {Array.from({ length: workoutStreakTarget }).map((_, i) => (
                   <View key={i} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: i < workoutsThisWeek ? '#FFFFFF' : 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' }}>
-                    {i < workoutsThisWeek && <Ionicons name="checkmark" size={20} color="#E8511A" />}
+                    {i < workoutsThisWeek && <Ionicons name="checkmark" size={20} color={colors.accent} />}
                   </View>
                 ))}
               </View>
@@ -673,7 +735,7 @@ function SeanceContent() {
                         onPress={() => { setStreakTarget(n); setShowObjectivesInStreak(false); }}
                         activeOpacity={0.8}
                       >
-                        <Text style={{ color: n === workoutStreakTarget ? '#E8511A' : '#FFFFFF', fontSize: 16, fontWeight: '800' }}>
+                        <Text style={{ color: n === workoutStreakTarget ? colors.accent : '#FFFFFF', fontSize: 16, fontWeight: '800' }}>
                           {n}
                         </Text>
                       </TouchableOpacity>
@@ -862,7 +924,7 @@ function SeanceContent() {
                             >
                               <View style={{
                                 width: 36, height: 36, borderRadius: 18,
-                                backgroundColor: isToday ? '#FF3B30' : hasWorkout ? colors.accent + '33' : 'transparent',
+                                backgroundColor: isToday ? colors.accent : hasWorkout ? colors.accent + '33' : 'transparent',
                                 alignItems: 'center', justifyContent: 'center',
                                 borderWidth: hasWorkout && !isToday ? 1.5 : 0,
                                 borderColor: hasWorkout && !isToday ? colors.accent : 'transparent',
@@ -1384,9 +1446,9 @@ function WaterContent() {
             return (
               <View key={d.date} style={waterStyles.barCol}>
                 <View style={waterStyles.barTrack}>
-                  <View style={[waterStyles.barFill, { height: h, backgroundColor: isToday ? '#4C9FFF' : isGoal ? colors.accent : colors.info }]} />
+                  <View style={[waterStyles.barFill, { height: h, backgroundColor: isToday ? colors.accent : isGoal ? colors.accent : colors.info }]} />
                 </View>
-                <Text style={[waterStyles.barDay, isToday && { color: '#4C9FFF', fontWeight: '700' }]}>{label}</Text>
+                <Text style={[waterStyles.barDay, isToday && { color: colors.accent, fontWeight: '700' }]}>{label}</Text>
               </View>
             );
           })}
@@ -1445,7 +1507,7 @@ function ProgrammeContent({ onLaunch }: { onLaunch: () => void }) {
       if (webDay && webDay.exercises.length > 0) {
         webDay.exercises.forEach((ex) => {
           const exercise = resolveExercise(ex.name);
-          const { numSets, reps } = parseProgramSets(ex.sets);
+          const { numSets, reps } = resolveProgramPrescription(ex);
           const restTime = parseProgramRest(ex.rest);
           addExerciseFromProgram(exercise, numSets, reps, restTime, `${ex.sets} — repos ${ex.rest}`);
         });

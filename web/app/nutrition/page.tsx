@@ -1,16 +1,124 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Apple, ChevronDown, ChevronUp, Clock, Filter, X, Youtube, Lightbulb, ChefHat, ListOrdered } from "lucide-react";
+import { Apple, ChevronDown, ChevronUp, Clock, Filter, X, Youtube, Lightbulb, ChefHat, ListOrdered, Droplets, Trophy, Flame } from "lucide-react";
 import { recipes, nutritionPlan } from "@/lib/mockData";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const ACCENT = "#1DB954";
 const CARD_BG = "#FFFFFF";
 const BORDER = "#E5E5E5";
 const MUTED = "#888888";
+
+type ShoppingItem = {
+  id: string;
+  label: string;
+  exportLabel: string;
+  store: "BOUCHER" | "SUPERMARCHE";
+};
+type GroceryRow = {
+  id: string;
+  categorie: string;
+  article: string;
+  quantite: string | null;
+  checked: boolean;
+};
+type WeeklyTrackingRow = {
+  date: string;
+  eau: number | null;
+};
+
+const SHOPPING_GROUPS: {
+  title: string;
+  subtitle?: string;
+  items: ShoppingItem[];
+}[] = [
+  {
+    title: "PROTEINES",
+    subtitle: "Boucher ~54 EUR/sem",
+    items: [
+      { id: "poulet", label: "Filet de poulet 1 kg", exportLabel: "Poulet 1kg", store: "BOUCHER" },
+      { id: "steak5", label: "Steak haché 5% 1 kg", exportLabel: "Steak haché 5% 1kg", store: "BOUCHER" },
+      { id: "cheval", label: "Rumsteak de cheval x2", exportLabel: "Cheval x2 rumsteaks", store: "BOUCHER" },
+      { id: "dinde", label: "Dinde ~500g-1kg", exportLabel: "Dinde 500g-1kg", store: "BOUCHER" },
+      { id: "oeufs", label: "Oeufs x20 (2 boites de 10)", exportLabel: "Oeufs x20", store: "SUPERMARCHE" },
+      { id: "foie", label: "Foie de volaille 200g (1x/sem)", exportLabel: "Foie de volaille 200g", store: "BOUCHER" },
+      { id: "sardines", label: "Sardines conserve x4", exportLabel: "Sardines conserve x4", store: "SUPERMARCHE" },
+    ],
+  },
+  {
+    title: "PRODUITS LAITIERS",
+    items: [
+      { id: "fb0", label: "Fromage blanc 0% (x3-4 pots)", exportLabel: "Fromage blanc 0% x4", store: "SUPERMARCHE" },
+      { id: "fb3", label: "Fromage blanc 3% (x2 pots)", exportLabel: "Fromage blanc 3% x2", store: "SUPERMARCHE" },
+      { id: "brebis", label: "Fromage de brebis", exportLabel: "Fromage brebis", store: "SUPERMARCHE" },
+      { id: "carresfrais", label: "Carrés frais", exportLabel: "Carrés frais", store: "SUPERMARCHE" },
+    ],
+  },
+  {
+    title: "FECULENTS",
+    items: [
+      { id: "riz", label: "Riz basmati (1 paquet)", exportLabel: "Riz basmati", store: "SUPERMARCHE" },
+      { id: "patatedouce", label: "Patate douce (1-1.5 kg)", exportLabel: "Patate douce 1.5kg", store: "SUPERMARCHE" },
+      { id: "pdt", label: "Pomme de terre (1 kg)", exportLabel: "Pomme de terre 1kg", store: "SUPERMARCHE" },
+      { id: "ebly", label: "Blé type Ebly", exportLabel: "Blé Ebly", store: "SUPERMARCHE" },
+      { id: "lentilles", label: "Lentilles", exportLabel: "Lentilles", store: "SUPERMARCHE" },
+      { id: "pain", label: "Pain complet / levain", exportLabel: "Pain complet", store: "SUPERMARCHE" },
+    ],
+  },
+  {
+    title: "LEGUMES",
+    items: [
+      { id: "brocolis", label: "Brocolis surgelés (x2 sachets)", exportLabel: "Brocolis surgelés x2", store: "SUPERMARCHE" },
+      { id: "courgettes", label: "Courgettes surgelées (x2 sachets)", exportLabel: "Courgettes surgelées x2", store: "SUPERMARCHE" },
+      { id: "epinards", label: "Épinards frais", exportLabel: "Épinards frais", store: "SUPERMARCHE" },
+      { id: "asperges", label: "Asperges", exportLabel: "Asperges", store: "SUPERMARCHE" },
+      { id: "betteraves", label: "Betteraves", exportLabel: "Betteraves", store: "SUPERMARCHE" },
+      { id: "carottes", label: "Carottes", exportLabel: "Carottes", store: "SUPERMARCHE" },
+    ],
+  },
+  {
+    title: "FRUITS",
+    items: [
+      { id: "bananes", label: "Bananes (régime)", exportLabel: "Bananes", store: "SUPERMARCHE" },
+      { id: "kiwis", label: "Kiwis (x6-8)", exportLabel: "Kiwis x8", store: "SUPERMARCHE" },
+      { id: "fruitsrouges", label: "Fruits rouges surgelés", exportLabel: "Fruits rouges surgelés", store: "SUPERMARCHE" },
+      { id: "dattes", label: "Dattes", exportLabel: "Dattes", store: "SUPERMARCHE" },
+    ],
+  },
+  {
+    title: "LIPIDES / OLEAGINEUX",
+    items: [
+      { id: "amandes", label: "Amandes (vrac)", exportLabel: "Amandes vrac", store: "SUPERMARCHE" },
+      { id: "noix", label: "Cerneaux de noix", exportLabel: "Noix", store: "SUPERMARCHE" },
+      { id: "huile", label: "Huile d'olive vierge extra", exportLabel: "Huile olive", store: "SUPERMARCHE" },
+      { id: "avocat", label: "Avocat x2-3 (pour la semaine)", exportLabel: "Avocat x3", store: "SUPERMARCHE" },
+      { id: "chia", label: "Graines de chia", exportLabel: "Graines de chia", store: "SUPERMARCHE" },
+    ],
+  },
+  {
+    title: "CONDIMENTS / EXTRAS",
+    items: [
+      { id: "ail", label: "Ail frais", exportLabel: "Ail", store: "SUPERMARCHE" },
+      { id: "oignons", label: "Oignons", exportLabel: "Oignons", store: "SUPERMARCHE" },
+      { id: "gingembre", label: "Gingembre frais", exportLabel: "Gingembre", store: "SUPERMARCHE" },
+      { id: "miel", label: "Miel", exportLabel: "Miel", store: "SUPERMARCHE" },
+      { id: "chocolat", label: "Chocolat noir 85%+", exportLabel: "Chocolat noir 85%", store: "SUPERMARCHE" },
+    ],
+  },
+];
 
 
 function PlanMealAccordion({ meal }: { meal: typeof nutritionPlan.days[0]['meals'][0] }) {
@@ -74,8 +182,22 @@ function PlanMealAccordion({ meal }: { meal: typeof nutritionPlan.days[0]['meals
 
 type Recipe = typeof recipes[0];
 
+const RECIPE_IMAGES: Record<number, string> = {
+  1: "https://images.unsplash.com/photo-1532550907401-a500c9a57435?auto=format&fit=crop&w=1200&q=80",
+  2: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80",
+  3: "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=1200&q=80",
+  4: "https://images.unsplash.com/photo-1612240498936-65f5101365d2?auto=format&fit=crop&w=1200&q=80",
+  5: "https://images.unsplash.com/photo-1603360946369-dc9bb6258143?auto=format&fit=crop&w=1200&q=80",
+  6: "https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=1200&q=80",
+};
+
+function recipeImageUrl(recipe: Recipe): string {
+  return RECIPE_IMAGES[recipe.id] ?? "";
+}
+
 function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void }) {
   const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(recipe.youtubeQuery)}`;
+  const imageUrl = recipeImageUrl(recipe);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -90,9 +212,20 @@ function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void 
         {/* Photo header */}
         <div
           className="relative h-48 flex items-center justify-center rounded-t-2xl overflow-hidden"
-          style={{ background: `linear-gradient(135deg, ${recipe.color}33, ${recipe.color}66)` }}
+          style={{ background: `linear-gradient(135deg, ${recipe.color}22, ${recipe.color}55)` }}
         >
-          <span className="text-8xl">{recipe.emoji}</span>
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={recipe.name}
+              className="absolute inset-0 w-full h-full object-cover"
+              loading="lazy"
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+            />
+          ) : null}
+          <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.35), rgba(0,0,0,0.08))" }} />
           <button
             onClick={onClose}
             className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-all"
@@ -223,12 +356,193 @@ function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void 
 export default function NutritionPage() {
   const [activeRecipeFilter, setActiveRecipeFilter] = useState("Tous");
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [shoppingChecked, setShoppingChecked] = useState<Record<string, boolean>>({});
+  const [groceryRows, setGroceryRows] = useState<GroceryRow[]>([]);
+  const [weeklyRows, setWeeklyRows] = useState<WeeklyTrackingRow[]>([]);
+  const [exportToast, setExportToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("nutrition_shopping_list_checked");
+      if (raw) setShoppingChecked(JSON.parse(raw));
+    } catch {
+      // ignore corrupted local data
+    }
+  }, []);
+
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/grocery")
+        .then((r) => r.json())
+        .then((rows: GroceryRow[]) => setGroceryRows(Array.isArray(rows) ? rows : []))
+        .catch(() => setGroceryRows([]));
+    load();
+    const id = setInterval(load, 10000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/weekly-tracking")
+        .then((r) => r.json())
+        .then((rows: WeeklyTrackingRow[]) => setWeeklyRows(Array.isArray(rows) ? rows : []))
+        .catch(() => setWeeklyRows([]));
+    load();
+    const id = setInterval(load, 15000);
+    return () => clearInterval(id);
+  }, []);
 
   const allTags = ["Tous", "Protéiné", "Low-carb", "Rapide", "Budget", "Pro-testo", "Petit-déj"];
   const filteredRecipes =
     activeRecipeFilter === "Tous"
       ? recipes
       : recipes.filter((r) => r.tags.includes(activeRecipeFilter));
+
+  const toggleShoppingItem = (id: string) => {
+    if (groceryRows.length > 0) {
+      const row = groceryRows.find((r) => r.id === id);
+      const next = !(row?.checked ?? false);
+      setGroceryRows((prev) => prev.map((r) => (r.id === id ? { ...r, checked: next } : r)));
+      fetch("/api/grocery", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, checked: next }),
+      }).catch(() => {});
+      return;
+    }
+    setShoppingChecked((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      try {
+        localStorage.setItem("nutrition_shopping_list_checked", JSON.stringify(next));
+      } catch {
+        // ignore localStorage failures
+      }
+      return next;
+    });
+  };
+
+  const resetShoppingList = () => {
+    if (groceryRows.length > 0) {
+      setGroceryRows((prev) => prev.map((r) => ({ ...r, checked: false })));
+      fetch("/api/grocery", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset" }),
+      }).catch(() => {});
+      return;
+    }
+    setShoppingChecked({});
+    try {
+      localStorage.setItem("nutrition_shopping_list_checked", JSON.stringify({}));
+    } catch {
+      // ignore localStorage failures
+    }
+  };
+
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+
+  const exportText = () => {
+    if (groceryRows.length > 0) {
+      const boucherRows = groceryRows.filter((r) => !r.checked && r.categorie.toLowerCase().includes("proté"));
+      const superRows = groceryRows.filter((r) => !r.checked && !r.categorie.toLowerCase().includes("proté"));
+      return `🛒 LISTE DE COURSES
+
+BOUCHER
+${boucherRows.length ? boucherRows.map((r) => `- ${r.article}${r.quantite ? ` ${r.quantite}` : ""}`).join("\n") : "- (déjà acheté)"}
+
+SUPERMARCHE
+${superRows.length ? superRows.map((r) => `- ${r.article}${r.quantite ? ` ${r.quantite}` : ""}`).join("\n") : "- (déjà acheté)"}`;
+    }
+
+    const boucher = SHOPPING_GROUPS.flatMap((group) =>
+      group.items
+        .filter((item) => item.store === "BOUCHER" && !shoppingChecked[item.id])
+        .map((item) => `- ${item.exportLabel}`)
+    );
+    const supermarche = SHOPPING_GROUPS.flatMap((group) =>
+      group.items
+        .filter((item) => item.store === "SUPERMARCHE" && !shoppingChecked[item.id])
+        .map((item) => `- ${item.exportLabel}`)
+    );
+
+    return `🛒 LISTE DE COURSES
+
+BOUCHER
+${boucher.length ? boucher.join("\n") : "- (déjà acheté)"}
+
+SUPERMARCHE
+${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
+  };
+
+  const exportShoppingList = async () => {
+    const content = exportText();
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(content);
+        setExportToast("Liste copiée !");
+        setTimeout(() => setExportToast(null), 2000);
+        return;
+      } catch {
+        // fallback to txt download
+      }
+    }
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "liste-de-courses.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportToast("Fichier .txt généré");
+    setTimeout(() => setExportToast(null), 2000);
+  };
+
+  const waterStats = useMemo(() => {
+    const sorted = [...weeklyRows]
+      .filter((row) => row.eau !== null)
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+    const history = sorted.map((row) => {
+      const d = new Date(row.date);
+      return {
+        date: row.date,
+        label: d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }),
+        eau: Number(row.eau ?? 0),
+      };
+    });
+    const last14 = history.slice(-14);
+    const target = 2.5;
+    const avg =
+      last14.length > 0
+        ? Number((last14.reduce((acc, row) => acc + row.eau, 0) / last14.length).toFixed(2))
+        : 0;
+    const bestDay = last14.reduce((best, curr) => (curr.eau > best.eau ? curr : best), last14[0]);
+    const todayIso = new Date().toISOString().split("T")[0];
+    const today = history.find((row) => row.date === todayIso)?.eau ?? 0;
+
+    let streak = 0;
+    for (let i = history.length - 1; i >= 0; i -= 1) {
+      const current = history[i];
+      if (current.eau < target) break;
+      if (i < history.length - 1) {
+        const prevDate = new Date(history[i + 1].date);
+        const currDate = new Date(current.date);
+        const diffDays = Math.round((prevDate.getTime() - currDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays !== 1) break;
+      }
+      streak += 1;
+    }
+
+    return {
+      target,
+      today,
+      avg,
+      streak,
+      bestDay,
+      chartData: last14,
+      historyData: [...last14].reverse(),
+    };
+  }, [weeklyRows]);
 
   return (
     <div className="p-8 space-y-6">
@@ -247,6 +561,8 @@ export default function NutritionPage() {
         <TabsList style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
           <TabsTrigger value="plans" className="text-sm">Plans</TabsTrigger>
           <TabsTrigger value="recettes" className="text-sm">Recettes</TabsTrigger>
+          <TabsTrigger value="hydratation" className="text-sm">Hydratation</TabsTrigger>
+          <TabsTrigger value="courses" className="text-sm">Liste de courses</TabsTrigger>
         </TabsList>
 
         {/* ── PLANS TAB ── */}
@@ -339,7 +655,18 @@ export default function NutritionPage() {
                   className="h-32 flex items-center justify-center rounded-t-lg overflow-hidden relative"
                   style={{ background: `linear-gradient(135deg, ${recipe.color}22, ${recipe.color}44)` }}
                 >
-                  <span className="text-5xl">{recipe.emoji}</span>
+                  {recipeImageUrl(recipe) ? (
+                    <img
+                      src={recipeImageUrl(recipe)}
+                      alt={recipe.name}
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover/card:scale-105"
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ) : null}
+                  <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.3), rgba(0,0,0,0.05))" }} />
                   <div className="absolute bottom-2 right-2">
                     <span
                       className="px-2 py-0.5 rounded-full text-xs font-semibold"
@@ -401,6 +728,230 @@ export default function NutritionPage() {
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        <TabsContent value="hydratation" className="mt-6 space-y-6">
+          <div className="grid grid-cols-4 gap-4">
+            <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs uppercase font-semibold" style={{ color: MUTED }}>Aujourd&apos;hui</p>
+                  <Droplets className="w-4 h-4" style={{ color: "#4C9BE8" }} />
+                </div>
+                <p className="text-3xl font-black text-gray-900">{waterStats.today.toFixed(1)}<span className="text-sm font-medium ml-1">L</span></p>
+                <p className="text-xs mt-1" style={{ color: waterStats.today >= waterStats.target ? ACCENT : MUTED }}>
+                  Objectif: {waterStats.target.toFixed(1)}L
+                </p>
+              </CardContent>
+            </Card>
+            <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs uppercase font-semibold" style={{ color: MUTED }}>Moyenne (14j)</p>
+                  <Flame className="w-4 h-4" style={{ color: ACCENT }} />
+                </div>
+                <p className="text-3xl font-black text-gray-900">{waterStats.avg.toFixed(1)}<span className="text-sm font-medium ml-1">L</span></p>
+                <p className="text-xs mt-1" style={{ color: MUTED }}>Sur {waterStats.chartData.length} jour(s) suivis</p>
+              </CardContent>
+            </Card>
+            <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs uppercase font-semibold" style={{ color: MUTED }}>Streak objectif</p>
+                  <Flame className="w-4 h-4" style={{ color: "#F59E0B" }} />
+                </div>
+                <p className="text-3xl font-black text-gray-900">{waterStats.streak}<span className="text-sm font-medium ml-1">j</span></p>
+                <p className="text-xs mt-1" style={{ color: MUTED }}>Jours consécutifs &ge; {waterStats.target.toFixed(1)}L</p>
+              </CardContent>
+            </Card>
+            <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs uppercase font-semibold" style={{ color: MUTED }}>Meilleur jour</p>
+                  <Trophy className="w-4 h-4" style={{ color: "#F59E0B" }} />
+                </div>
+                <p className="text-3xl font-black text-gray-900">{(waterStats.bestDay?.eau ?? 0).toFixed(1)}<span className="text-sm font-medium ml-1">L</span></p>
+                <p className="text-xs mt-1" style={{ color: MUTED }}>{waterStats.bestDay?.label ?? "Aucune donnée"}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-bold text-gray-900">Courbe hydratation (14 derniers jours)</CardTitle>
+              <p className="text-xs" style={{ color: MUTED }}>Visualise ta consommation quotidienne d&apos;eau et la tendance</p>
+            </CardHeader>
+            <CardContent>
+              {waterStats.chartData.length === 0 ? (
+                <p className="text-sm" style={{ color: MUTED }}>Aucune donnée d&apos;hydratation disponible.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <AreaChart data={waterStats.chartData}>
+                    <defs>
+                      <linearGradient id="waterGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#4C9BE8" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#4C9BE8" stopOpacity={0.04} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke={MUTED} />
+                    <YAxis unit="L" tick={{ fontSize: 11 }} stroke={MUTED} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#FFFFFF", border: `1px solid ${BORDER}`, borderRadius: 8 }}
+                      formatter={(value) => [`${Number(value).toFixed(1)} L`, "Eau"]}
+                    />
+                    <Area type="monotone" dataKey="eau" stroke="#4C9BE8" fill="url(#waterGradient)" strokeWidth={2} />
+                    <Line type="monotone" dataKey={() => waterStats.target} stroke={ACCENT} strokeDasharray="6 4" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-bold text-gray-900">Historique journalier</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {waterStats.historyData.length === 0 && (
+                <p className="text-sm" style={{ color: MUTED }}>Renseigne `eau` dans le suivi hebdo pour voir l&apos;historique ici.</p>
+              )}
+              {waterStats.historyData.map((row) => (
+                <div
+                  key={row.date}
+                  className="flex items-center justify-between rounded-lg px-3 py-2"
+                  style={{ border: `1px solid ${BORDER}`, backgroundColor: "#FAFAFA" }}
+                >
+                  <p className="text-sm font-medium text-gray-900">{row.label}</p>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      className="text-xs"
+                      style={{
+                        backgroundColor: row.eau >= waterStats.target ? "rgba(29,185,84,0.12)" : "rgba(76,155,232,0.12)",
+                        color: row.eau >= waterStats.target ? ACCENT : "#4C9BE8",
+                        border: "none",
+                      }}
+                    >
+                      {row.eau.toFixed(1)} L
+                    </Badge>
+                    {row.eau >= waterStats.target ? (
+                      <span className="text-xs font-semibold" style={{ color: ACCENT }}>objectif atteint</span>
+                    ) : (
+                      <span className="text-xs font-semibold" style={{ color: MUTED }}>
+                        manque {(waterStats.target - row.eau).toFixed(1)}L
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="courses" className="mt-6 space-y-4">
+          <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-bold text-gray-900">Liste de courses hebdomadaire</CardTitle>
+                  <p className="text-xs mt-1" style={{ color: MUTED }}>
+                    Coche les aliments achetés, puis exporte la liste propre pour tes Notes.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {exportToast && (
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-md" style={{ backgroundColor: "rgba(29,185,84,0.12)", color: ACCENT }}>
+                      {exportToast}
+                    </span>
+                  )}
+                  <button
+                    onClick={resetShoppingList}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                    style={{ backgroundColor: "#E5E5E5", color: "#555555" }}
+                  >
+                    Réinitialiser
+                  </button>
+                  <button
+                    onClick={exportShoppingList}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                    style={{ backgroundColor: ACCENT, color: "#FFFFFF" }}
+                  >
+                    Exporter
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {groceryRows.length === 0 && SHOPPING_GROUPS.map((group) => (
+                <div key={group.title} className="rounded-xl p-4" style={{ border: `1px solid ${BORDER}`, backgroundColor: "#FAFAFA" }}>
+                  <div className="mb-3">
+                    <p className="text-xs font-black tracking-wide text-gray-900">{group.title}</p>
+                    {group.subtitle && (
+                      <p className="text-xs mt-0.5" style={{ color: MUTED }}>{group.subtitle}</p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {group.items.map((item) => {
+                      const checked = !!shoppingChecked[item.id];
+                      return (
+                        <label
+                          key={item.id}
+                          className="flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer transition-colors"
+                          style={{ backgroundColor: checked ? "#F0F0F0" : "transparent" }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleShoppingItem(item.id)}
+                            className="w-4 h-4 accent-green-600"
+                          />
+                          <span
+                            className="text-sm"
+                            style={{
+                              color: checked ? "#9CA3AF" : "#111827",
+                              textDecoration: checked ? "line-through" : "none",
+                            }}
+                          >
+                            {item.label}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {groceryRows.length > 0 && (
+                <div className="rounded-xl p-4" style={{ border: `1px solid ${BORDER}`, backgroundColor: "#FAFAFA" }}>
+                  <p className="text-xs font-black tracking-wide text-gray-900 mb-3">LISTE SUPABASE (SYNC)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {groceryRows.map((row) => (
+                      <label
+                        key={row.id}
+                        className="flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer transition-colors"
+                        style={{ backgroundColor: row.checked ? "#F0F0F0" : "transparent" }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!row.checked}
+                          onChange={() => toggleShoppingItem(row.id)}
+                          className="w-4 h-4 accent-green-600"
+                        />
+                        <span
+                          className="text-sm"
+                          style={{
+                            color: row.checked ? "#9CA3AF" : "#111827",
+                            textDecoration: row.checked ? "line-through" : "none",
+                          }}
+                        >
+                          {row.article}{row.quantite ? ` ${row.quantite}` : ""}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

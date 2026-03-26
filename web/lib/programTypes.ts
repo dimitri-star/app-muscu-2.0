@@ -3,6 +3,8 @@ export interface ProgramExercise {
   name: string;
   sets: string; // e.g. "4×6"
   rest: string; // e.g. "3min"
+  targetSets?: number; // structured value used by mobile
+  targetReps?: number; // structured value used by mobile
 }
 
 export type DayType = 'push' | 'pull' | 'legs' | 'rest' | 'cardio' | 'full';

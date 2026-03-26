@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSeances, saveSeance, type SavedSeance } from "@/lib/seanceState";
-import fs from "fs";
-import path from "path";
+import { type SavedSeance } from "@/lib/seanceState";
+import { supabase } from "@/lib/supabase";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -10,7 +9,38 @@ const CORS = {
 };
 
 export async function GET() {
-  const seances = getSeances();
+  const { data, error } = await supabase
+    .from("workouts")
+    .select("id,date,type,duree_min,volume_total,workout_exercises(id,exercice,charge_reelle,reps_reelles,rpe_reel,notes,ordre)")
+    .order("date", { ascending: false });
+
+  if (error) {
+    return NextResponse.json([], { headers: CORS });
+  }
+
+  const seances: SavedSeance[] = (data || []).map((w) => ({
+    id: w.id,
+    name: w.type || "Séance",
+    date: w.date,
+    duration: w.duree_min ?? 0,
+    totalVolume: Number(w.volume_total ?? 0),
+    totalSets: (w.workout_exercises || []).length,
+    source: "mobile",
+    exercises: (w.workout_exercises || [])
+      .sort((a, b) => (a.ordre ?? 0) - (b.ordre ?? 0))
+      .map((ex) => ({
+        name: ex.exercice,
+        notes: ex.notes ?? "",
+        sets: [
+          {
+            reps: Number((ex.reps_reelles || "0").split(",")[0]?.trim() || 0),
+            weight: Number((ex.charge_reelle || "0").replace(/[^\d.-]/g, "")) || 0,
+            done: true,
+          },
+        ],
+      })),
+  }));
+
   return NextResponse.json(seances, { headers: CORS });
 }
 
@@ -32,25 +62,51 @@ export async function POST(request: Request) {
       });
     }
 
-    const seance: SavedSeance = {
-      id: body.id || `seance_${Date.now()}`,
-      name: body.name || body.title || "Séance",
-      date: body.date || new Date().toISOString().split("T")[0],
-      duration: body.duration ?? 0,
-      totalVolume,
-      totalSets,
-      source: body.source || "mobile",
-      exercises: (body.exercises || []).map(
-        (ex: { exercise?: { name?: string }; name?: string; sets?: object[]; notes?: string }) => ({
-          name: ex.exercise?.name ?? ex.name ?? "Exercice",
-          sets: ex.sets ?? [],
-          notes: ex.notes ?? "",
-        })
-      ),
-    };
+    const payloadDate = body.date || new Date().toISOString().split("T")[0];
+    const workoutType = body.name || body.title || "Séance";
+    const duration = body.duration ?? 0;
 
-    saveSeance(seance);
-    return NextResponse.json({ ok: true, id: seance.id }, { headers: CORS });
+    const { data: workout, error: workoutError } = await supabase
+      .from("workouts")
+      .insert({
+        date: payloadDate,
+        type: workoutType,
+        duree_min: duration,
+        volume_total: totalVolume,
+        rpe_max: body.rpeMax ?? null,
+        notes: body.notes ?? null,
+      })
+      .select("id")
+      .single();
+
+    if (workoutError || !workout) {
+      return NextResponse.json({ error: "DB error" }, { status: 500, headers: CORS });
+    }
+
+    const exercisesRows = (body.exercises || []).map(
+      (ex: { exercise?: { name?: string }; name?: string; sets?: { reps?: number; weight?: number; done?: boolean; rpe?: number }[]; notes?: string }, idx: number) => {
+        const name = ex.exercise?.name ?? ex.name ?? "Exercice";
+        const doneSets = (ex.sets || []).filter((s) => s.done);
+        const repsStr = doneSets.map((s) => s.reps ?? 0).join(", ");
+        const firstSet = doneSets[0];
+        return {
+          workout_id: workout.id,
+          exercice: name,
+          format: `${(ex.sets || []).length}x`,
+          charge_reelle: firstSet?.weight ? `${firstSet.weight}` : null,
+          reps_reelles: repsStr || null,
+          rpe_reel: firstSet?.rpe ?? null,
+          notes: ex.notes ?? null,
+          ordre: idx,
+        };
+      }
+    );
+
+    if (exercisesRows.length > 0) {
+      await supabase.from("workout_exercises").insert(exercisesRows);
+    }
+
+    return NextResponse.json({ ok: true, id: workout.id }, { headers: CORS });
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400, headers: CORS });
   }
@@ -59,10 +115,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const { id } = await request.json();
-    const seances = getSeances();
-    const updated = seances.filter((s) => s.id !== id);
-    const DATA_FILE = path.join(process.cwd(), ".seances-data.json");
-    fs.writeFileSync(DATA_FILE, JSON.stringify(updated, null, 2), "utf-8");
+    await supabase.from("workouts").delete().eq("id", id);
     return NextResponse.json({ ok: true }, { headers: CORS });
   } catch {
     return NextResponse.json({ error: "Error" }, { status: 500, headers: CORS });

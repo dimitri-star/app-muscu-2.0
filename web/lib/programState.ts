@@ -1,8 +1,33 @@
 import fs from 'fs';
 import path from 'path';
-import type { Program } from './programTypes';
+import type { Program, ProgramExercise } from './programTypes';
 
 const DATA_FILE = path.join(process.cwd(), '.programme-data.json');
+
+function parseSetPrescription(setsStr: string): { targetSets?: number; targetReps?: number } {
+  if (!setsStr) return {};
+  const m = setsStr.match(/(\d+)\s*[x×]\s*(\d+)/i);
+  if (!m) return {};
+  const targetSets = Number.parseInt(m[1], 10);
+  const targetReps = Number.parseInt(m[2], 10);
+  if (!Number.isFinite(targetSets) || !Number.isFinite(targetReps)) return {};
+  return { targetSets, targetReps };
+}
+
+function normalizeExercise(exercise: ProgramExercise): ProgramExercise {
+  if (exercise.targetSets && exercise.targetReps) return exercise;
+  return { ...exercise, ...parseSetPrescription(exercise.sets) };
+}
+
+function normalizeProgram(program: Program): Program {
+  return {
+    ...program,
+    days: program.days.map((day) => ({
+      ...day,
+      exercises: day.exercises.map(normalizeExercise),
+    })),
+  };
+}
 
 const DEFAULT_PROGRAM: Program = {
   id: 'bloc1-hybride',
@@ -129,14 +154,14 @@ export function getProgram(): Program {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      return JSON.parse(raw) as Program;
+      return normalizeProgram(JSON.parse(raw) as Program);
     }
   } catch {
     // fallback
   }
-  return DEFAULT_PROGRAM;
+  return normalizeProgram(DEFAULT_PROGRAM);
 }
 
 export function saveProgram(program: Program): void {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(program, null, 2), 'utf-8');
+  fs.writeFileSync(DATA_FILE, JSON.stringify(normalizeProgram(program), null, 2), 'utf-8');
 }

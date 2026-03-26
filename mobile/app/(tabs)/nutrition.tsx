@@ -164,9 +164,9 @@ function getFoodStyles(colors: ReturnType<typeof getColors>) {
 // ─── Meal Section ─────────────────────────────────────────────────────────────
 
 const MEAL_CONFIG = {
-  breakfast: { label: 'Petit-déjeuner', emoji: '🌅', color: '#FFB800' },
-  lunch:     { label: 'Déjeuner',       emoji: '☀️',  color: '#FF6B35' },
-  dinner:    { label: 'Dîner',          emoji: '🌙',  color: '#4C9FFF' },
+  breakfast: { label: 'Petit-déjeuner', emoji: '🌅', color: '#1DB954' },
+  lunch:     { label: 'Déjeuner',       emoji: '☀️',  color: '#17A94D' },
+  dinner:    { label: 'Dîner',          emoji: '🌙',  color: '#139143' },
   snack:     { label: 'Collations',     emoji: '🍌',  color: '#1DB954' },
 } as const;
 
@@ -262,12 +262,12 @@ function WaterGaugeLarge({ current, goal }: { current: number; goal: number }) {
         <Circle cx={size / 2} cy={size / 2} r={radius} stroke={colors.border} strokeWidth={strokeWidth} fill="none" />
         <Circle
           cx={size / 2} cy={size / 2} r={radius}
-          stroke="#4C9FFF" strokeWidth={strokeWidth} fill="none"
+          stroke={colors.accent} strokeWidth={strokeWidth} fill="none"
           strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round"
         />
       </Svg>
       <View style={{ position: 'absolute', alignItems: 'center' }}>
-        <Text style={{ color: '#4C9FFF', fontSize: 28, fontWeight: '900' }}>
+        <Text style={{ color: colors.accent, fontSize: 28, fontWeight: '900' }}>
           {current >= 1000 ? `${(current / 1000).toFixed(1)}L` : `${current}ml`}
         </Text>
         <Text style={{ color: colors.textMuted, fontSize: 13 }}>
@@ -326,7 +326,7 @@ function HydrationTab() {
           <View style={hydroStyles.gaugeInfo}>
             <View style={hydroStyles.statRow}>
               <Text style={hydroStyles.statLabel}>Consommé</Text>
-              <Text style={[hydroStyles.statValue, { color: '#4C9FFF' }]}>
+              <Text style={[hydroStyles.statValue, { color: colors.accent }]}>
                 {(current / 1000).toFixed(2)}L
               </Text>
             </View>
@@ -419,7 +419,7 @@ function HydrationTab() {
                 <Text style={hydroStyles.entryTime}>{entry.time}</Text>
                 <Text style={hydroStyles.entryAmount}>{entry.amount} ml</Text>
               </View>
-              <Text style={[hydroStyles.entryAmountBig, { color: '#4C9FFF' }]}>
+              <Text style={[hydroStyles.entryAmountBig, { color: colors.accent }]}>
                 {(entry.amount / 1000).toFixed(2)}L
               </Text>
               <TouchableOpacity
@@ -463,12 +463,12 @@ function HydrationTab() {
                       hydroStyles.barFill,
                       {
                         height: `${pct * 100}%`,
-                        backgroundColor: isToday ? '#4C9FFF' : pct >= 1 ? colors.accent : colors.border,
+                        backgroundColor: isToday ? colors.accent : pct >= 1 ? colors.accent : colors.border,
                       },
                     ]}
                   />
                 </View>
-                <Text style={[hydroStyles.barDay, isToday && { color: '#4C9FFF', fontWeight: '800' }]}>
+                <Text style={[hydroStyles.barDay, isToday && { color: colors.accent, fontWeight: '800' }]}>
                   {label}
                 </Text>
               </View>
@@ -478,7 +478,7 @@ function HydrationTab() {
         <View style={hydroStyles.weekLegend}>
           <View style={[hydroStyles.legendDot, { backgroundColor: colors.accent }]} />
           <Text style={hydroStyles.legendText}>Objectif atteint</Text>
-          <View style={[hydroStyles.legendDot, { backgroundColor: '#4C9FFF', marginLeft: 12 }]} />
+          <View style={[hydroStyles.legendDot, { backgroundColor: colors.accent, marginLeft: 12 }]} />
           <Text style={hydroStyles.legendText}>Aujourd'hui</Text>
           <View style={[hydroStyles.legendDot, { backgroundColor: colors.border, marginLeft: 12 }]} />
           <Text style={hydroStyles.legendText}>Incomplet</Text>
@@ -552,16 +552,16 @@ function getHydroStyles(colors: ReturnType<typeof getColors>) {
     quickBtn: {
       flex: 1, backgroundColor: colors.background, borderRadius: 12,
       paddingVertical: 14, alignItems: 'center',
-      borderWidth: 1.5, borderColor: '#4C9FFF',
+      borderWidth: 1.5, borderColor: colors.accent,
     },
-    quickBtnAmount: { color: '#4C9FFF', fontSize: 16, fontWeight: '800' },
+    quickBtnAmount: { color: colors.accent, fontSize: 16, fontWeight: '800' },
     quickBtnUnit: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
     bigBtn: {
-      backgroundColor: 'rgba(76,159,255,0.12)', borderRadius: 14,
+      backgroundColor: colors.accentMuted, borderRadius: 14,
       paddingVertical: 14, alignItems: 'center',
-      borderWidth: 1.5, borderColor: '#4C9FFF', marginBottom: 10,
+      borderWidth: 1.5, borderColor: colors.accent, marginBottom: 10,
     },
-    bigBtnText: { color: '#4C9FFF', fontSize: 16, fontWeight: '800' },
+    bigBtnText: { color: colors.accent, fontSize: 16, fontWeight: '800' },
     customRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
     customInput: {
       flex: 1, backgroundColor: colors.background, borderRadius: 12,
@@ -592,7 +592,7 @@ function getHydroStyles(colors: ReturnType<typeof getColors>) {
       flexDirection: 'row', alignItems: 'center', gap: 12,
       paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border,
     },
-    entryDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4C9FFF' },
+    entryDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
     entryInfo: { flex: 1 },
     entryTime: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
     entryAmount: { color: colors.text, fontSize: 14, fontWeight: '600' },
@@ -634,7 +634,7 @@ function getModalStyles(colors: ReturnType<typeof getColors>) {
     inputRow: {
       flexDirection: 'row', alignItems: 'center',
       backgroundColor: colors.card, borderRadius: 14, borderWidth: 1.5,
-      borderColor: '#4C9FFF', paddingHorizontal: 16, marginBottom: 16,
+      borderColor: colors.accent, paddingHorizontal: 16, marginBottom: 16,
     },
     input: { flex: 1, fontSize: 28, fontWeight: '800', color: colors.text, paddingVertical: 14 },
     inputSuffix: { color: colors.textMuted, fontSize: 20, fontWeight: '600' },
@@ -720,7 +720,7 @@ export default function NutritionScreen() {
                   {[
                     { label: 'Consommées', value: Math.round(totals.calories), color: MacroColors.calories },
                     { label: 'Objectif', value: goals.calories, color: colors.textMuted },
-                    { label: 'Brûlées', value: 320, color: '#4C9FFF' },
+                    { label: 'Brûlées', value: 320, color: colors.accent },
                   ].map((row) => (
                     <View key={row.label} style={styles.summaryRow}>
                       <View style={[styles.summaryDot, { backgroundColor: row.color }]} />
