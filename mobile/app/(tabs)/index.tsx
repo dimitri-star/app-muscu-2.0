@@ -16,7 +16,7 @@ import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
 import { useWorkoutStore, useWaterStore, useGamificationStore, useProgramStore } from '../../store';
 import { weeklyProgram, exercisesDB, type Exercise } from '../../constants/mockData';
-import { PROGRAMME_API } from '../../constants/api';
+import { PROGRAMME_API, SEANCES_API } from '../../constants/api';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -778,7 +778,7 @@ export default function DashboardScreen() {
   const s = useMemo(() => getStyles(colors), [isDark]);
   const router = useRouter();
   const { workoutStreakDays, checkAndResetWeekly } = useGamificationStore();
-  const { checkStaleWorkout, savedWorkouts, clearExercises, startWorkout, addExercise, addExerciseFromProgram } = useWorkoutStore();
+  const { checkStaleWorkout, savedWorkouts, clearExercises, startWorkout, addExercise, addExerciseFromProgram, syncSavedWorkoutsFromApi } = useWorkoutStore();
   const { fetchProgram } = useProgramStore();
   const { current: waterCurrent, goal: waterGoal, addWater, checkAndResetDaily } = useWaterStore();
   const [showStreak, setShowStreak] = useState(false);
@@ -789,6 +789,7 @@ export default function DashboardScreen() {
     checkAndResetWeekly();
     checkStaleWorkout();
     checkAndResetDaily();
+    syncSavedWorkoutsFromApi(SEANCES_API);
   }, []);
 
   useEffect(() => {

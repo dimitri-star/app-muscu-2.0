@@ -216,6 +216,7 @@ interface WorkoutState {
   stopRestTimer: () => void;
   addCustomExercise: (ex: CustomExercise) => void;
   checkStaleWorkout: () => void;
+  syncSavedWorkoutsFromApi: (apiUrl: string) => Promise<void>;
 }
 
 export const useWorkoutStore = create<WorkoutState>()(
@@ -274,6 +275,58 @@ export const useWorkoutStore = create<WorkoutState>()(
         const startDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         if (startDate !== getTodayStr()) {
           set({ isActive: false, workoutStartTime: null });
+        }
+      },
+
+      syncSavedWorkoutsFromApi: async (apiUrl: string) => {
+        try {
+          const response = await fetch(apiUrl);
+          if (!response.ok) return;
+          const data = await response.json();
+          if (!Array.isArray(data)) return;
+
+          const toWorkout = (w: any): Workout => ({
+            id: String(w.id ?? makeUid('saved')),
+            name: String(w.name ?? 'Séance'),
+            date: String(w.date ?? getTodayStr()),
+            duration: Number(w.duration ?? 0),
+            totalVolume: Number(w.totalVolume ?? 0),
+            totalSets: Number(w.totalSets ?? 0),
+            exercises: Array.isArray(w.exercises)
+              ? w.exercises.map((ex: any, exIdx: number) => ({
+                  id: makeUid(`sync_ex_${exIdx}`),
+                  exercise: {
+                    id: makeUid(`sync_def_${exIdx}`),
+                    name: String(ex?.name ?? 'Exercice'),
+                    muscleGroup: 'Autre',
+                    category: 'Compound',
+                    equipment: 'Autre',
+                  },
+                  sets: Array.isArray(ex?.sets)
+                    ? ex.sets.map((s: any, setIdx: number) => ({
+                        id: makeUid(`sync_set_${setIdx}`),
+                        reps: Number(s?.reps ?? 0),
+                        weight: Number(s?.weight ?? 0),
+                        done: Boolean(s?.done),
+                      }))
+                    : [],
+                  restTime: 90,
+                  notes: ex?.notes ? String(ex.notes) : '',
+                }))
+              : [],
+          });
+
+          const remoteWorkouts = data.map(toWorkout);
+          set((state) => {
+            const byId = new Map<string, Workout>();
+            [...remoteWorkouts, ...state.savedWorkouts].forEach((w) => {
+              if (!byId.has(w.id)) byId.set(w.id, w);
+            });
+            const merged = Array.from(byId.values()).sort((a, b) => (a.date < b.date ? 1 : -1));
+            return { savedWorkouts: merged };
+          });
+        } catch {
+          // keep local state if remote sync fails
         }
       },
 

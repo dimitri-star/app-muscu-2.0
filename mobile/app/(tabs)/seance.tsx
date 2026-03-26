@@ -408,6 +408,7 @@ function SeanceContent() {
     tickRestTimer,
     stopRestTimer,
     checkStaleWorkout,
+    syncSavedWorkoutsFromApi,
   } = useWorkoutStore();
 
   const { workoutStreakWeeks, workoutStreakDays, workoutStreakTarget, workoutsThisWeek, setStreakTarget, checkAndResetWeekly, completeWorkout, lastWorkoutDate } = useGamificationStore();
@@ -418,13 +419,14 @@ function SeanceContent() {
     useCallback(() => {
       checkAndResetWeekly();
       checkStaleWorkout();
+      syncSavedWorkoutsFromApi(SEANCES_API);
       const today = toDateStr(new Date());
       const hasTodayWorkout = savedWorkouts.some((w) => w.date === today);
       // Backfill streak state for workouts saved before streak hook was wired.
       if (hasTodayWorkout && lastWorkoutDate !== today) {
         completeWorkout();
       }
-    }, [checkAndResetWeekly, checkStaleWorkout, savedWorkouts, lastWorkoutDate, completeWorkout])
+    }, [checkAndResetWeekly, checkStaleWorkout, syncSavedWorkoutsFromApi, savedWorkouts, lastWorkoutDate, completeWorkout])
   );
 
   const [, forceUpdate] = useReducer((x) => x + 1, 0);
