@@ -11,7 +11,7 @@ const CORS = {
 export async function GET() {
   const { data, error } = await supabase
     .from("workouts")
-    .select("id,date,type,duree_min,volume_total,workout_exercises(id,exercice,charge_reelle,reps_reelles,rpe_reel,notes,ordre)")
+    .select("id,date,type,duree_min,volume_total,rpe_max,notes,workout_exercises(id,exercice,charge_reelle,reps_reelles,rpe_reel,notes,ordre)")
     .order("date", { ascending: false });
 
   if (error) {
