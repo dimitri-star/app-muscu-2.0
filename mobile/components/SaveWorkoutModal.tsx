@@ -28,7 +28,19 @@ interface WorkoutData {
 interface SaveWorkoutModalProps {
   visible: boolean;
   onClose: () => void;
-  onSave: () => void;
+  onSave: (payload: {
+    title: string;
+    description: string;
+    tags: string[];
+    effortRating: number;
+    energyRating: number;
+    moodRating: number;
+    sleepHours: string;
+    sleepQuality: number;
+    morningEnergy: number;
+    soreness: number;
+    visibility: VisibilityOption;
+  }) => void;
   workoutData: WorkoutData;
 }
 
@@ -491,7 +503,21 @@ export default function SaveWorkoutModal({
           {/* CTA */}
           <TouchableOpacity
             style={[styles.saveBtn, { backgroundColor: colors.cta }]}
-            onPress={onSave}
+            onPress={() =>
+              onSave({
+                title,
+                description,
+                tags: selectedTags,
+                effortRating,
+                energyRating,
+                moodRating,
+                sleepHours,
+                sleepQuality,
+                morningEnergy,
+                soreness,
+                visibility,
+              })
+            }
             activeOpacity={0.85}
           >
             <Text style={[styles.saveBtnText, { color: colors.ctaText }]}>

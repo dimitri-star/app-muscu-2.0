@@ -9,8 +9,11 @@ import { recipes, nutritionPlan } from "@/lib/mockData";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -520,6 +523,31 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
     const todayIso = new Date().toISOString().split("T")[0];
     const today = history.find((row) => row.date === todayIso)?.eau ?? 0;
 
+    const getIsoWeek = (dateStr: string) => {
+      const d = new Date(`${dateStr}T12:00:00`);
+      const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const dayNum = utc.getUTCDay() || 7;
+      utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+      const week = Math.ceil((((utc.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+      return { year: utc.getUTCFullYear(), week };
+    };
+
+    const weeklyMap = new Map<string, { label: string; eau: number }>();
+    history.forEach((row) => {
+      const w = getIsoWeek(row.date);
+      const key = `${w.year}-W${String(w.week).padStart(2, "0")}`;
+      const prev = weeklyMap.get(key);
+      weeklyMap.set(key, {
+        label: `S${w.week}`,
+        eau: Number(((prev?.eau ?? 0) + row.eau).toFixed(2)),
+      });
+    });
+    const weeklySeries = Array.from(weeklyMap.entries())
+      .map(([key, value]) => ({ key, ...value }))
+      .sort((a, b) => (a.key < b.key ? -1 : 1));
+    const last8Weeks = weeklySeries.slice(-8);
+
     let streak = 0;
     for (let i = history.length - 1; i >= 0; i -= 1) {
       const current = history[i];
@@ -535,11 +563,12 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
 
     return {
       target,
+      targetWeekly: Number((target * 7).toFixed(1)),
       today,
       avg,
       streak,
       bestDay,
-      chartData: last14,
+      chartData: last8Weeks,
       historyData: [...last14].reverse(),
     };
   }, [weeklyRows]);
@@ -739,6 +768,18 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
                   <Droplets className="w-4 h-4" style={{ color: "#4C9BE8" }} />
                 </div>
                 <p className="text-3xl font-black text-gray-900">{waterStats.today.toFixed(1)}<span className="text-sm font-medium ml-1">L</span></p>
+                <div className="mt-2 mb-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "#EAF1FB" }}>
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, Math.round((waterStats.today / waterStats.target) * 100))}%`,
+                      backgroundColor: "#4C9BE8",
+                    }}
+                  />
+                </div>
+                <p className="text-[11px] font-semibold" style={{ color: MUTED }}>
+                  {Math.min(100, Math.round((waterStats.today / waterStats.target) * 100))}% de l&apos;objectif
+                </p>
                 <p className="text-xs mt-1" style={{ color: waterStats.today >= waterStats.target ? ACCENT : MUTED }}>
                   Objectif: {waterStats.target.toFixed(1)}L
                 </p>
@@ -778,21 +819,15 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
 
           <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base font-bold text-gray-900">Courbe hydratation (14 derniers jours)</CardTitle>
-              <p className="text-xs" style={{ color: MUTED }}>Visualise ta consommation quotidienne d&apos;eau et la tendance</p>
+              <CardTitle className="text-base font-bold text-gray-900">Hydratation par semaine</CardTitle>
+              <p className="text-xs" style={{ color: MUTED }}>Barres hebdo + ligne objectif (2.5L × 7)</p>
             </CardHeader>
             <CardContent>
               {waterStats.chartData.length === 0 ? (
                 <p className="text-sm" style={{ color: MUTED }}>Aucune donnée d&apos;hydratation disponible.</p>
               ) : (
                 <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={waterStats.chartData}>
-                    <defs>
-                      <linearGradient id="waterGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#4C9BE8" stopOpacity={0.35} />
-                        <stop offset="95%" stopColor="#4C9BE8" stopOpacity={0.04} />
-                      </linearGradient>
-                    </defs>
+                  <BarChart data={waterStats.chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke={MUTED} />
                     <YAxis unit="L" tick={{ fontSize: 11 }} stroke={MUTED} />
@@ -800,9 +835,13 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
                       contentStyle={{ backgroundColor: "#FFFFFF", border: `1px solid ${BORDER}`, borderRadius: 8 }}
                       formatter={(value) => [`${Number(value).toFixed(1)} L`, "Eau"]}
                     />
-                    <Area type="monotone" dataKey="eau" stroke="#4C9BE8" fill="url(#waterGradient)" strokeWidth={2} />
-                    <Line type="monotone" dataKey={() => waterStats.target} stroke={ACCENT} strokeDasharray="6 4" dot={false} />
-                  </AreaChart>
+                    <ReferenceLine y={waterStats.targetWeekly} stroke={ACCENT} strokeDasharray="6 4" />
+                    <Bar
+                      dataKey="eau"
+                      radius={[6, 6, 0, 0]}
+                      fill="#4C9BE8"
+                    />
+                  </BarChart>
                 </ResponsiveContainer>
               )}
             </CardContent>

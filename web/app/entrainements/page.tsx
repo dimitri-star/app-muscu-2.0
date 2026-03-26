@@ -92,7 +92,9 @@ const muscleGroups = ["Tous", "Poitrine", "Dos", "Jambes", "Épaules", "Bras", "
 export default function EntrainementsPage() {
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [selectedMuscle, setSelectedMuscle] = useState("Tous");
+  const [rawSeances, setRawSeances] = useState<SavedSeance[]>([]);
   const [apiSeances, setApiSeances] = useState<ReturnType<typeof seanceToDisplayWorkout>[]>([]);
+  const [selectedSeance, setSelectedSeance] = useState<SavedSeance | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -101,6 +103,7 @@ export default function EntrainementsPage() {
         .then((r) => r.json())
         .then((data: SavedSeance[]) => {
           if (Array.isArray(data)) {
+            setRawSeances(data);
             setApiSeances(data.map(seanceToDisplayWorkout));
           }
         })
@@ -114,7 +117,9 @@ export default function EntrainementsPage() {
   const handleDelete = async (id: string) => {
     // Remove from API (only API sessions can be deleted)
     await fetch("/api/seances", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    setRawSeances((prev) => prev.filter((s) => s.id !== id));
     setApiSeances((prev) => prev.filter((s) => s.id !== id));
+    if (selectedSeance?.id === id) setSelectedSeance(null);
   };
 
   const allDisplayWorkouts = [...apiSeances];
@@ -205,8 +210,12 @@ export default function EntrainementsPage() {
           {filtered.map((workout) => (
             <Card
               key={workout.id}
-              className="hover:border-green-500/40 transition-colors"
+              className="hover:border-green-500/40 transition-colors cursor-pointer"
               style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}
+              onClick={() => {
+                const full = rawSeances.find((s) => s.id === workout.id);
+                if (full) setSelectedSeance(full);
+              }}
             >
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-3">
@@ -230,7 +239,10 @@ export default function EntrainementsPage() {
                     </Badge>
                     {workout.source === "mobile" && (
                       <button
-                        onClick={() => handleDelete(workout.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(workout.id);
+                        }}
                         className="opacity-40 hover:opacity-100 transition-opacity"
                       >
                         <Trash2 className="w-3.5 h-3.5" style={{ color: "#EF4444" }} />
@@ -285,8 +297,12 @@ export default function EntrainementsPage() {
                 {filtered.map((w, i) => (
                   <tr
                     key={w.id}
-                    className="hover:bg-black/5 transition-colors"
+                    className="hover:bg-black/5 transition-colors cursor-pointer"
                     style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${BORDER}` : "none" }}
+                    onClick={() => {
+                      const full = rawSeances.find((s) => s.id === w.id);
+                      if (full) setSelectedSeance(full);
+                    }}
                   >
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{w.title}</td>
                     <td className="px-4 py-3 text-sm" style={{ color: MUTED }}>{w.date}</td>
@@ -313,6 +329,112 @@ export default function EntrainementsPage() {
             </table>
           </CardContent>
         </Card>
+      )}
+
+      {selectedSeance && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+          onClick={() => setSelectedSeance(null)}
+        >
+          <div
+            className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl"
+            style={{ border: `1px solid ${BORDER}` }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between px-6 py-5 border-b" style={{ borderColor: BORDER }}>
+              <div>
+                <p className="text-xs" style={{ color: MUTED }}>{formatDate(selectedSeance.date)}</p>
+                <h3 className="text-xl font-bold text-gray-900 mt-1">{selectedSeance.name}</h3>
+                <p className="text-xs mt-1" style={{ color: MUTED }}>
+                  {selectedSeance.source === "mobile" ? "Source mobile" : "Source web"} · {selectedSeance.exercises.length} exercices
+                </p>
+              </div>
+              <Button variant="outline" onClick={() => setSelectedSeance(null)} style={{ borderColor: BORDER, color: MUTED }}>
+                Fermer
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 px-6 py-4" style={{ borderBottom: `1px solid ${BORDER}` }}>
+              <div className="rounded-lg p-3 text-center" style={{ backgroundColor: "#F5F5F5" }}>
+                <p className="text-lg font-bold text-gray-900">{formatDuration(selectedSeance.duration)}</p>
+                <p className="text-xs" style={{ color: MUTED }}>Durée</p>
+              </div>
+              <div className="rounded-lg p-3 text-center" style={{ backgroundColor: "#F5F5F5" }}>
+                <p className="text-lg font-bold text-gray-900">{formatVolume(selectedSeance.totalVolume)}</p>
+                <p className="text-xs" style={{ color: MUTED }}>Volume</p>
+              </div>
+              <div className="rounded-lg p-3 text-center" style={{ backgroundColor: "#F5F5F5" }}>
+                <p className="text-lg font-bold text-gray-900">{selectedSeance.totalSets}</p>
+                <p className="text-xs" style={{ color: MUTED }}>Séries</p>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 max-h-[55vh] overflow-y-auto space-y-4">
+              {(selectedSeance.notes || selectedSeance.sessionMeta) && (
+                <div className="rounded-xl p-3" style={{ border: `1px solid ${BORDER}`, backgroundColor: "#F8F8F8" }}>
+                  <p className="text-sm font-bold text-gray-900 mb-2">Ressenti avant sauvegarde</p>
+                  {selectedSeance.notes ? (
+                    <p className="text-sm mb-2" style={{ color: "#444" }}>{selectedSeance.notes}</p>
+                  ) : null}
+                  {selectedSeance.sessionMeta && (
+                    <div className="flex flex-wrap gap-2">
+                      {typeof selectedSeance.sessionMeta.effortRating === "number" && (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "rgba(29,185,84,0.14)", color: ACCENT }}>
+                          Effort {selectedSeance.sessionMeta.effortRating}/10
+                        </span>
+                      )}
+                      {typeof selectedSeance.sessionMeta.energyRating === "number" && (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#EFEFEF", color: "#444" }}>
+                          Énergie {selectedSeance.sessionMeta.energyRating}/5
+                        </span>
+                      )}
+                      {typeof selectedSeance.sessionMeta.moodRating === "number" && (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#EFEFEF", color: "#444" }}>
+                          Humeur {selectedSeance.sessionMeta.moodRating}/5
+                        </span>
+                      )}
+                      {selectedSeance.sessionMeta.sleepHours && (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#EFEFEF", color: "#444" }}>
+                          Sommeil {selectedSeance.sessionMeta.sleepHours}
+                        </span>
+                      )}
+                      {typeof selectedSeance.sessionMeta.sleepQuality === "number" && (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#EFEFEF", color: "#444" }}>
+                          Qualité sommeil {selectedSeance.sessionMeta.sleepQuality}/5
+                        </span>
+                      )}
+                      {typeof selectedSeance.sessionMeta.morningEnergy === "number" && (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#EFEFEF", color: "#444" }}>
+                          Énergie matin {selectedSeance.sessionMeta.morningEnergy}/5
+                        </span>
+                      )}
+                      {typeof selectedSeance.sessionMeta.soreness === "number" && (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#EFEFEF", color: "#444" }}>
+                          Courbatures {selectedSeance.sessionMeta.soreness}/5
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedSeance.exercises.map((ex, exIdx) => (
+                <div key={`${ex.name}_${exIdx}`} className="rounded-xl p-3" style={{ border: `1px solid ${BORDER}` }}>
+                  <p className="text-sm font-bold text-gray-900 mb-2">{ex.name}</p>
+                  <div className="space-y-1.5">
+                    {ex.sets.map((set, setIdx) => (
+                      <div key={`${exIdx}_${setIdx}`} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: set.done ? "rgba(29,185,84,0.10)" : "#F8F8F8" }}>
+                        <span className="text-xs font-semibold" style={{ color: MUTED }}>Série {setIdx + 1}</span>
+                        <span className="text-sm font-semibold text-gray-900">{set.weight > 0 ? `${set.weight} kg × ` : ""}{set.reps} reps</span>
+                      </div>
+                    ))}
+                  </div>
+                  {ex.notes && <p className="text-xs mt-2" style={{ color: MUTED }}>Notes: {ex.notes}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

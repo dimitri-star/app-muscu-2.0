@@ -18,28 +18,47 @@ export async function GET() {
     return NextResponse.json([], { headers: CORS });
   }
 
-  const seances: SavedSeance[] = (data || []).map((w) => ({
-    id: w.id,
-    name: w.type || "Séance",
-    date: w.date,
-    duration: w.duree_min ?? 0,
-    totalVolume: Number(w.volume_total ?? 0),
-    totalSets: (w.workout_exercises || []).length,
-    source: "mobile",
-    exercises: (w.workout_exercises || [])
-      .sort((a, b) => (a.ordre ?? 0) - (b.ordre ?? 0))
-      .map((ex) => ({
-        name: ex.exercice,
-        notes: ex.notes ?? "",
-        sets: [
-          {
-            reps: Number((ex.reps_reelles || "0").split(",")[0]?.trim() || 0),
-            weight: Number((ex.charge_reelle || "0").replace(/[^\d.-]/g, "")) || 0,
-            done: true,
-          },
-        ],
-      })),
-  }));
+  const seances: SavedSeance[] = (data || []).map((w) => {
+    let workoutNote = "";
+    let sessionMeta: SavedSeance["sessionMeta"] = null;
+    const rawNotes = (w.notes as string | null) ?? "";
+    if (rawNotes.startsWith("__META__")) {
+      try {
+        const parsed = JSON.parse(rawNotes.replace("__META__", ""));
+        workoutNote = parsed?.note ?? "";
+        sessionMeta = parsed?.sessionMeta ?? null;
+      } catch {
+        workoutNote = rawNotes;
+      }
+    } else {
+      workoutNote = rawNotes;
+    }
+
+    return {
+      id: w.id,
+      name: w.type || "Séance",
+      date: w.date,
+      duration: w.duree_min ?? 0,
+      totalVolume: Number(w.volume_total ?? 0),
+      totalSets: (w.workout_exercises || []).length,
+      source: "mobile",
+      notes: workoutNote,
+      sessionMeta,
+      exercises: (w.workout_exercises || [])
+        .sort((a, b) => (a.ordre ?? 0) - (b.ordre ?? 0))
+        .map((ex) => ({
+          name: ex.exercice,
+          notes: ex.notes ?? "",
+          sets: [
+            {
+              reps: Number((ex.reps_reelles || "0").split(",")[0]?.trim() || 0),
+              weight: Number((ex.charge_reelle || "0").replace(/[^\d.-]/g, "")) || 0,
+              done: true,
+            },
+          ],
+        })),
+    };
+  });
 
   return NextResponse.json(seances, { headers: CORS });
 }
@@ -66,6 +85,11 @@ export async function POST(request: Request) {
     const workoutType = body.name || body.title || "Séance";
     const duration = body.duration ?? 0;
 
+    const mergedNotes =
+      body.sessionMeta
+        ? `__META__${JSON.stringify({ note: body.notes ?? "", sessionMeta: body.sessionMeta })}`
+        : (body.notes ?? null);
+
     const { data: workout, error: workoutError } = await supabase
       .from("workouts")
       .insert({
@@ -74,7 +98,7 @@ export async function POST(request: Request) {
         duree_min: duration,
         volume_total: totalVolume,
         rpe_max: body.rpeMax ?? null,
-        notes: body.notes ?? null,
+        notes: mergedNotes,
       })
       .select("id")
       .single();

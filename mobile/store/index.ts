@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPlatformStorage } from './storage';
 import { todayWorkout, todayMeals, DAILY_GOALS, recentWorkouts } from '../constants/mockData';
+import { WEEKLY_TRACKING_API } from '../constants/api';
 import type { WorkoutExercise, MealEntry, WorkoutSet, Workout } from '../constants/mockData';
 
 // ─── WATER STORE ──────────────────────────────────────────────────────────────
@@ -41,6 +42,34 @@ function getMondayStr(): string {
   const d = new Date(today);
   d.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
   return d.toISOString().split('T')[0];
+}
+
+function getIsoWeek(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+function getFrenchDayLabel(date: Date): string {
+  const labels = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  return labels[date.getDay()];
+}
+
+function syncHydrationToWeb(currentMl: number): void {
+  const now = new Date();
+  const payload = {
+    semaine: getIsoWeek(now),
+    jour: getFrenchDayLabel(now),
+    date: getTodayStr(),
+    eau: Number((currentMl / 1000).toFixed(2)),
+  };
+  fetch(WEEKLY_TRACKING_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
 }
 
 export function getShortDayFromDate(dateStr: string): string {
@@ -109,14 +138,18 @@ export const useWaterStore = create<WaterState>()(
           );
           return { current: newCurrent, entries: [...state.entries, newEntry], weekHistory: newHistory };
         });
+        const latest = get().current;
+        syncHydrationToWeb(latest);
       },
 
       removeEntry: (id) =>
         set((state) => {
           const entry = state.entries.find((e) => e.id === id);
           if (!entry) return state;
+          const nextCurrent = Math.max(0, state.current - entry.amount);
+          syncHydrationToWeb(nextCurrent);
           return {
-            current: Math.max(0, state.current - entry.amount),
+            current: nextCurrent,
             entries: state.entries.filter((e) => e.id !== id),
           };
         }),

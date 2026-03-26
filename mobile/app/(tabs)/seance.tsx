@@ -522,7 +522,19 @@ function SeanceContent() {
     addExercise(exercise);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (meta?: {
+    title: string;
+    description: string;
+    tags: string[];
+    effortRating: number;
+    energyRating: number;
+    moodRating: number;
+    sleepHours: string;
+    sleepQuality: number;
+    morningEnergy: number;
+    soreness: number;
+    visibility: 'Tout le monde' | 'Amis' | 'Prive';
+  }) => {
     saveWorkout({ name: workoutName, duration: elapsedSeconds, exercises });
     completeWorkout();
     try {
@@ -531,10 +543,25 @@ function SeanceContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: `mobile_${Date.now()}`,
-          name: workoutName,
+          name: meta?.title?.trim() ? meta.title.trim() : workoutName,
           date: new Date().toISOString().split('T')[0],
           duration: Math.max(1, Math.round(elapsedSeconds / 60)),
           source: 'mobile',
+          rpeMax: meta?.effortRating ?? null,
+          notes: meta?.description ?? '',
+          sessionMeta: meta
+            ? {
+                tags: meta.tags,
+                effortRating: meta.effortRating,
+                energyRating: meta.energyRating,
+                moodRating: meta.moodRating,
+                sleepHours: meta.sleepHours,
+                sleepQuality: meta.sleepQuality,
+                morningEnergy: meta.morningEnergy,
+                soreness: meta.soreness,
+                visibility: meta.visibility,
+              }
+            : null,
           exercises,
         }),
       });

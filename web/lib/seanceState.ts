@@ -17,6 +17,19 @@ export interface SavedSeance {
   totalVolume: number; // kg
   totalSets: number;
   source: "mobile" | "web" | "programme";
+  rpeMax?: number | null;
+  notes?: string;
+  sessionMeta?: {
+    tags?: string[];
+    effortRating?: number;
+    energyRating?: number;
+    moodRating?: number;
+    sleepHours?: string;
+    sleepQuality?: number;
+    morningEnergy?: number;
+    soreness?: number;
+    visibility?: "Tout le monde" | "Amis" | "Prive";
+  } | null;
   exercises: SavedSeanceExercise[];
 }
 

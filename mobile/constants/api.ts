@@ -6,3 +6,4 @@ export const PROGRAMME_API = `${WEB_API_URL}/api/programme`;
 export const SEANCES_API = `${WEB_API_URL}/api/seances`;
 export const PROFILE_API = `${WEB_API_URL}/api/profile`;
 export const RECORDS_API = `${WEB_API_URL}/api/records`;
+export const WEEKLY_TRACKING_API = `${WEB_API_URL}/api/weekly-tracking`;
