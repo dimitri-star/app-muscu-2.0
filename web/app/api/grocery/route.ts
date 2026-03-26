@@ -8,6 +8,7 @@ const CORS = {
 };
 
 export async function GET() {
+  if (!supabase) return NextResponse.json([], { headers: CORS });
   const { data } = await supabase
     .from("grocery_list")
     .select("*")
@@ -17,6 +18,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
+    if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 503, headers: CORS });
     const body = await request.json();
     const { id, checked } = body || {};
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400, headers: CORS });
@@ -30,6 +32,7 @@ export async function PUT(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 503, headers: CORS });
     const body = await request.json();
     if (body?.action === "reset") {
       const { error } = await supabase.from("grocery_list").update({ checked: false }).neq("id", "");

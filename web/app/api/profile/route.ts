@@ -8,6 +8,7 @@ const CORS = {
 };
 
 export async function GET() {
+  if (!supabase) return NextResponse.json(null, { headers: CORS });
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
@@ -21,6 +22,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
+    if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 503, headers: CORS });
     const body = await request.json();
     const { data: current } = await supabase
       .from("profiles")

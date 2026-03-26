@@ -8,6 +8,7 @@ const CORS = {
 };
 
 export async function GET() {
+  if (!supabase) return NextResponse.json([], { headers: CORS });
   const { data, error } = await supabase
     .from("records")
     .select("*")
@@ -18,6 +19,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 503, headers: CORS });
     const body = await request.json();
     const { data, error } = await supabase.from("records").insert(body).select("*").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: CORS });
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 503, headers: CORS });
     const body = await request.json();
     const { id, ...rest } = body || {};
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400, headers: CORS });
@@ -42,6 +45,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 503, headers: CORS });
     const body = await request.json();
     const { id } = body || {};
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400, headers: CORS });

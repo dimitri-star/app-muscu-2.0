@@ -8,6 +8,7 @@ const CORS = {
 };
 
 export async function GET() {
+  if (!supabase) return NextResponse.json([], { headers: CORS });
   const { data } = await supabase
     .from("weekly_tracking")
     .select("*")
@@ -18,6 +19,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 503, headers: CORS });
     const body = await request.json();
     const rows = Array.isArray(body) ? body : [body];
     const { error } = await supabase.from("weekly_tracking").upsert(rows, { onConflict: "semaine,jour" });

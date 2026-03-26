@@ -9,6 +9,7 @@ const CORS = {
 };
 
 export async function GET() {
+  if (!supabase) return NextResponse.json([], { headers: CORS });
   const { data, error } = await supabase
     .from("workouts")
     .select("id,date,type,duree_min,volume_total,rpe_max,notes,workout_exercises(id,exercice,charge_reelle,reps_reelles,rpe_reel,notes,ordre)")
@@ -65,6 +66,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 503, headers: CORS });
     const body = await request.json();
 
     // Compute totalVolume / totalSets from mobile Workout format if not provided
@@ -138,6 +140,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 503, headers: CORS });
     const { id } = await request.json();
     await supabase.from("workouts").delete().eq("id", id);
     return NextResponse.json({ ok: true }, { headers: CORS });
