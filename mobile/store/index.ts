@@ -25,6 +25,7 @@ interface WaterState {
   resetWater: () => void;
   setGoal: (goal: number) => void;
   checkAndResetDaily: () => void;
+  syncFromWeb: (apiUrl: string) => Promise<void>;
 }
 
 function getTodayStr(): string {
@@ -157,6 +158,48 @@ export const useWaterStore = create<WaterState>()(
       resetWater: () => set({ current: 0, entries: [] }),
 
       setGoal: (goal) => set({ goal }),
+
+      syncFromWeb: async (apiUrl) => {
+        try {
+          const response = await fetch(apiUrl);
+          if (!response.ok) return;
+          const rows = await response.json();
+          if (!Array.isArray(rows)) return;
+
+          const today = getTodayStr();
+          const byDate = new Map<string, number>();
+          rows.forEach((r: any) => {
+            const date = String(r?.date || "");
+            const liters = Number(r?.eau ?? 0);
+            if (!date || !Number.isFinite(liters)) return;
+            byDate.set(date, Math.max(0, Math.round(liters * 1000)));
+          });
+
+          const state = get();
+          const nextHistory = Array.from({ length: 7 }, (_, i) => {
+            const d = new Date();
+            d.setDate(d.getDate() - (6 - i));
+            const dateStr = d.toISOString().split('T')[0];
+            return {
+              date: dateStr,
+              amount: byDate.get(dateStr) ?? 0,
+              goal: state.goal,
+            };
+          });
+          const cloudToday = byDate.get(today);
+          if (typeof cloudToday === 'number') {
+            set({
+              current: cloudToday,
+              weekHistory: nextHistory,
+              lastResetDate: today,
+            });
+          } else {
+            set({ weekHistory: nextHistory });
+          }
+        } catch {
+          // keep local values when offline
+        }
+      },
     }),
     {
       name: 'water-store-v3',
@@ -642,6 +685,7 @@ interface GamificationState {
   addXp: (amount: number) => void;
   completeWaterGoal: () => void;
   completeWorkout: () => void;
+  syncWorkoutStreakFromHistory: (workoutDates: string[]) => void;
   setStreakTarget: (n: number) => void;
   checkAndResetWeekly: () => void;
 }
@@ -734,6 +778,39 @@ export const useGamificationStore = create<GamificationState>()(
             level,
             xpToNextLevel,
           };
+        }),
+
+      syncWorkoutStreakFromHistory: (workoutDates) =>
+        set((state) => {
+          if (!Array.isArray(workoutDates) || workoutDates.length === 0) {
+            return state;
+          }
+          const unique = Array.from(
+            new Set(
+              workoutDates
+                .map((d) => String(d).slice(0, 10))
+                .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+            )
+          ).sort((a, b) => (a < b ? -1 : 1));
+          if (!unique.length) return state;
+
+          const today = getTodayStr();
+          const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+          const latest = unique[unique.length - 1];
+          if (latest !== today && latest !== yesterday) {
+            return { ...state, workoutStreakDays: 0, lastWorkoutDate: latest };
+          }
+
+          let streak = 1;
+          for (let i = unique.length - 1; i > 0; i -= 1) {
+            const curr = new Date(`${unique[i]}T12:00:00`);
+            const prev = new Date(`${unique[i - 1]}T12:00:00`);
+            const diffDays = Math.round((curr.getTime() - prev.getTime()) / 86400000);
+            if (diffDays === 1) streak += 1;
+            else break;
+          }
+
+          return { ...state, workoutStreakDays: streak, lastWorkoutDate: latest };
         }),
 
       setStreakTarget: (n) => set({ workoutStreakTarget: Math.max(1, Math.min(7, n)) }),

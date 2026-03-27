@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Apple, ChevronDown, ChevronUp, Clock, Filter, X, Youtube, Lightbulb, ChefHat, ListOrdered, Droplets, Trophy, Flame } from "lucide-react";
+import { Apple, ChevronDown, ChevronUp, Clock, Filter, X, Youtube, Lightbulb, ChefHat, ListOrdered, Droplets, Trophy, Flame, Plus, Pencil, Trash2 } from "lucide-react";
 import { recipes, nutritionPlan } from "@/lib/mockData";
 import {
   Area,
@@ -42,6 +42,39 @@ type WeeklyTrackingRow = {
   date: string;
   eau: number | null;
 };
+
+type Recipe = typeof recipes[0];
+type AppRecipe = Recipe & { source?: "builtin" | "custom"; youtubeUrl?: string };
+type GroceryEditorState = {
+  mode: "create" | "edit";
+  id?: string;
+  categorie: string;
+  article: string;
+  quantite: string;
+} | null;
+
+const GROCERY_CATEGORY_ORDER = [
+  "PROTEINES",
+  "PRODUITS LAITIERS",
+  "FECULENTS",
+  "LEGUMES",
+  "FRUITS",
+  "LIPIDES / OLEAGINEUX",
+  "CONDIMENTS / EXTRAS",
+  "AUTRE",
+];
+
+function normalizeCategoryName(raw: string): string {
+  const c = String(raw || "").toUpperCase();
+  if (c.includes("PROT")) return "PROTEINES";
+  if (c.includes("LAIT")) return "PRODUITS LAITIERS";
+  if (c.includes("FEC") || c.includes("RIZ") || c.includes("PATE") || c.includes("PDT")) return "FECULENTS";
+  if (c.includes("LEGUME")) return "LEGUMES";
+  if (c.includes("FRUIT")) return "FRUITS";
+  if (c.includes("LIPIDE") || c.includes("OLEA") || c.includes("NOIX") || c.includes("AMANDE")) return "LIPIDES / OLEAGINEUX";
+  if (c.includes("CONDIMENT") || c.includes("EXTRA")) return "CONDIMENTS / EXTRAS";
+  return c || "AUTRE";
+}
 
 const SHOPPING_GROUPS: {
   title: string;
@@ -183,8 +216,6 @@ function PlanMealAccordion({ meal }: { meal: typeof nutritionPlan.days[0]['meals
   );
 }
 
-type Recipe = typeof recipes[0];
-
 const RECIPE_IMAGES: Record<number, string> = {
   1: "https://images.unsplash.com/photo-1532550907401-a500c9a57435?auto=format&fit=crop&w=1200&q=80",
   2: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80",
@@ -194,12 +225,20 @@ const RECIPE_IMAGES: Record<number, string> = {
   6: "https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=1200&q=80",
 };
 
-function recipeImageUrl(recipe: Recipe): string {
-  return RECIPE_IMAGES[recipe.id] ?? "";
+function youtubeIdFromUrl(url?: string): string | null {
+  if (!url) return null;
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/i);
+  return m?.[1] ?? null;
 }
 
-function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void }) {
-  const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(recipe.youtubeQuery)}`;
+function recipeImageUrl(recipe: AppRecipe): string {
+  const ytId = youtubeIdFromUrl(recipe.youtubeUrl);
+  if (ytId) return `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+  return RECIPE_IMAGES[Number(recipe.id)] ?? "";
+}
+
+function RecipeModal({ recipe, onClose }: { recipe: AppRecipe; onClose: () => void }) {
+  const youtubeUrl = recipe.youtubeUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(recipe.youtubeQuery)}`;
   const imageUrl = recipeImageUrl(recipe);
   return (
     <div
@@ -358,9 +397,16 @@ function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void 
 
 export default function NutritionPage() {
   const [activeRecipeFilter, setActiveRecipeFilter] = useState("Tous");
-  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [selectedRecipe, setSelectedRecipe] = useState<AppRecipe | null>(null);
+  const [customRecipes, setCustomRecipes] = useState<AppRecipe[]>([]);
+  const [showRecipeCreator, setShowRecipeCreator] = useState(false);
+  const [recipeYoutubeUrl, setRecipeYoutubeUrl] = useState("");
+  const [recipeRawText, setRecipeRawText] = useState("");
+  const [recipeGenerating, setRecipeGenerating] = useState(false);
+  const [recipeCreatorError, setRecipeCreatorError] = useState<string | null>(null);
   const [shoppingChecked, setShoppingChecked] = useState<Record<string, boolean>>({});
   const [groceryRows, setGroceryRows] = useState<GroceryRow[]>([]);
+  const [groceryEditor, setGroceryEditor] = useState<GroceryEditorState>(null);
   const [weeklyRows, setWeeklyRows] = useState<WeeklyTrackingRow[]>([]);
   const [exportToast, setExportToast] = useState<string | null>(null);
 
@@ -368,6 +414,17 @@ export default function NutritionPage() {
     try {
       const raw = localStorage.getItem("nutrition_shopping_list_checked");
       if (raw) setShoppingChecked(JSON.parse(raw));
+    } catch {
+      // ignore corrupted local data
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("nutrition_custom_recipes_v1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) setCustomRecipes(parsed);
     } catch {
       // ignore corrupted local data
     }
@@ -395,11 +452,21 @@ export default function NutritionPage() {
     return () => clearInterval(id);
   }, []);
 
+  const saveCustomRecipes = (next: AppRecipe[]) => {
+    setCustomRecipes(next);
+    try {
+      localStorage.setItem("nutrition_custom_recipes_v1", JSON.stringify(next));
+    } catch {
+      // ignore localStorage failures
+    }
+  };
+
   const allTags = ["Tous", "Protéiné", "Low-carb", "Rapide", "Budget", "Pro-testo", "Petit-déj"];
+  const allRecipes: AppRecipe[] = [...customRecipes, ...recipes.map((r) => ({ ...r, source: "builtin" as const }))];
   const filteredRecipes =
     activeRecipeFilter === "Tous"
-      ? recipes
-      : recipes.filter((r) => r.tags.includes(activeRecipeFilter));
+      ? allRecipes
+      : allRecipes.filter((r) => r.tags.includes(activeRecipeFilter));
 
   const toggleShoppingItem = (id: string) => {
     if (groceryRows.length > 0) {
@@ -501,6 +568,128 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
     setTimeout(() => setExportToast(null), 2000);
   };
 
+  const createRecipeFromAI = async () => {
+    if (!recipeYoutubeUrl.trim() && !recipeRawText.trim()) {
+      setRecipeCreatorError("Ajoute un lien YouTube ou un texte de recette.");
+      return;
+    }
+    setRecipeCreatorError(null);
+    setRecipeGenerating(true);
+    try {
+      const prompt = `Transforme ces infos en recette JSON stricte.
+Lien YouTube: ${recipeYoutubeUrl || "n/a"}
+Texte brut: ${recipeRawText || "n/a"}
+
+Retourne UNIQUEMENT un JSON objet:
+{
+"name":"...",
+"time":"20 min",
+"calories":550,
+"protein":40,
+"carbs":50,
+"fat":12,
+"tags":["Protéiné","Rapide"],
+"tip":"...",
+"ingredients":["..."],
+"steps":["..."],
+"youtubeQuery":"..."
+}`;
+      const r = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: prompt, history: [] }),
+      });
+      const data = await r.json();
+      const text = String(data?.response || "");
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start < 0 || end < 0) throw new Error("Réponse IA invalide.");
+      const parsed = JSON.parse(text.slice(start, end + 1));
+      const next: AppRecipe = {
+        id: Date.now(),
+        source: "custom",
+        youtubeUrl: recipeYoutubeUrl.trim() || undefined,
+        name: String(parsed.name || "Nouvelle recette"),
+        time: String(parsed.time || "20 min"),
+        calories: Number(parsed.calories || 0),
+        protein: Number(parsed.protein || 0),
+        carbs: Number(parsed.carbs || 0),
+        fat: Number(parsed.fat || 0),
+        tags: Array.isArray(parsed.tags) && parsed.tags.length ? parsed.tags.map(String) : ["Rapide"],
+        emoji: "🍽️",
+        color: "#1DB954",
+        ingredients: Array.isArray(parsed.ingredients) ? parsed.ingredients.map(String) : [],
+        ingredientDetails: (Array.isArray(parsed.ingredients) ? parsed.ingredients : []).map((ing: string) => ({
+          name: String(ing),
+          qty: "à ajuster",
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+          calories: 0,
+        })),
+        steps: Array.isArray(parsed.steps) ? parsed.steps.map(String) : ["Préparation libre."],
+        tip: String(parsed.tip || ""),
+        youtubeQuery: String(parsed.youtubeQuery || parsed.name || "recette musculation"),
+      };
+      const merged = [next, ...customRecipes];
+      saveCustomRecipes(merged);
+      setSelectedRecipe(next);
+      setShowRecipeCreator(false);
+      setRecipeYoutubeUrl("");
+      setRecipeRawText("");
+    } catch (e) {
+      setRecipeCreatorError(e instanceof Error ? e.message : "Impossible de générer la recette.");
+    } finally {
+      setRecipeGenerating(false);
+    }
+  };
+
+  const deleteCustomRecipe = (id: number | string) => {
+    const merged = customRecipes.filter((r) => r.id !== id);
+    saveCustomRecipes(merged);
+    if (selectedRecipe?.id === id) setSelectedRecipe(null);
+  };
+
+  const saveGroceryEditor = async () => {
+    if (!groceryEditor) return;
+    const categorie = groceryEditor.categorie.trim();
+    const article = groceryEditor.article.trim();
+    const quantite = groceryEditor.quantite.trim();
+    if (!categorie || !article) return;
+
+    if (groceryEditor.mode === "create") {
+      const tempId = `tmp_${Date.now()}`;
+      setGroceryRows((prev) => [...prev, { id: tempId, categorie, article, quantite: quantite || null, checked: false }]);
+      const r = await fetch("/api/grocery", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create", categorie, article, quantite: quantite || null }),
+      });
+      const created = await r.json().catch(() => null);
+      if (created?.id) {
+        setGroceryRows((prev) => prev.map((row) => (row.id === tempId ? created : row)));
+      }
+    } else if (groceryEditor.id) {
+      const id = groceryEditor.id;
+      setGroceryRows((prev) => prev.map((row) => (row.id === id ? { ...row, categorie, article, quantite: quantite || null } : row)));
+      await fetch("/api/grocery", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, categorie, article, quantite: quantite || null }),
+      }).catch(() => {});
+    }
+    setGroceryEditor(null);
+  };
+
+  const removeGroceryRow = async (id: string) => {
+    setGroceryRows((prev) => prev.filter((r) => r.id !== id));
+    await fetch("/api/grocery", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    }).catch(() => {});
+  };
+
   const waterStats = useMemo(() => {
     const sorted = [...weeklyRows]
       .filter((row) => row.eau !== null)
@@ -573,10 +762,71 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
     };
   }, [weeklyRows]);
 
+  const groupedGroceryRows = useMemo(() => {
+    if (!groceryRows.length) return [];
+    const map = new Map<string, GroceryRow[]>();
+    groceryRows.forEach((row) => {
+      const key = normalizeCategoryName(row.categorie);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(row);
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => {
+        const ia = GROCERY_CATEGORY_ORDER.indexOf(a[0]);
+        const ib = GROCERY_CATEGORY_ORDER.indexOf(b[0]);
+        const va = ia === -1 ? 999 : ia;
+        const vb = ib === -1 ? 999 : ib;
+        return va - vb || a[0].localeCompare(b[0], "fr");
+      })
+      .map(([category, rows]) => ({ category, rows }));
+  }, [groceryRows]);
+
   return (
     <div className="p-8 space-y-6">
       {selectedRecipe && (
         <RecipeModal recipe={selectedRecipe} onClose={() => setSelectedRecipe(null)} />
+      )}
+      {showRecipeCreator && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45" onClick={() => setShowRecipeCreator(false)}>
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl border p-6 space-y-4" style={{ borderColor: BORDER }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900">Ajouter une recette (YouTube + IA)</h3>
+              <button onClick={() => setShowRecipeCreator(false)}><X className="w-5 h-5" style={{ color: MUTED }} /></button>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold" style={{ color: MUTED }}>Lien YouTube</p>
+              <input value={recipeYoutubeUrl} onChange={(e) => setRecipeYoutubeUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BORDER }} />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold" style={{ color: MUTED }}>Recette brute (optionnel)</p>
+              <textarea value={recipeRawText} onChange={(e) => setRecipeRawText(e.target.value)} rows={6} placeholder="Copie/colle des ingrédients, étapes, notes..." className="w-full rounded-lg border px-3 py-2 text-sm resize-none" style={{ borderColor: BORDER }} />
+            </div>
+            {recipeCreatorError ? <p className="text-xs font-semibold text-red-600">{recipeCreatorError}</p> : null}
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setShowRecipeCreator(false)} className="px-3 py-2 rounded-lg text-sm font-semibold" style={{ backgroundColor: "#E5E5E5", color: "#555" }}>Annuler</button>
+              <button onClick={createRecipeFromAI} disabled={recipeGenerating} className="px-3 py-2 rounded-lg text-sm font-semibold" style={{ backgroundColor: ACCENT, color: "#FFF" }}>
+                {recipeGenerating ? "Génération..." : "Créer la recette"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {groceryEditor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45" onClick={() => setGroceryEditor(null)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border p-6 space-y-4" style={{ borderColor: BORDER }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900">{groceryEditor.mode === "create" ? "Ajouter un article" : "Modifier l'article"}</h3>
+              <button onClick={() => setGroceryEditor(null)}><X className="w-5 h-5" style={{ color: MUTED }} /></button>
+            </div>
+            <input value={groceryEditor.categorie} onChange={(e) => setGroceryEditor((s) => (s ? { ...s, categorie: e.target.value } : s))} placeholder="Catégorie (ex: PROTEINES)" className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BORDER }} />
+            <input value={groceryEditor.article} onChange={(e) => setGroceryEditor((s) => (s ? { ...s, article: e.target.value } : s))} placeholder="Article" className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BORDER }} />
+            <input value={groceryEditor.quantite} onChange={(e) => setGroceryEditor((s) => (s ? { ...s, quantite: e.target.value } : s))} placeholder="Quantité (optionnel)" className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BORDER }} />
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setGroceryEditor(null)} className="px-3 py-2 rounded-lg text-sm font-semibold" style={{ backgroundColor: "#E5E5E5", color: "#555" }}>Annuler</button>
+              <button onClick={saveGroceryEditor} className="px-3 py-2 rounded-lg text-sm font-semibold" style={{ backgroundColor: ACCENT, color: "#FFF" }}>Enregistrer</button>
+            </div>
+          </div>
+        </div>
       )}
       {/* Header */}
       <div>
@@ -653,6 +903,15 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
 
         {/* ── RECETTES TAB ── */}
         <TabsContent value="recettes" className="mt-6 space-y-6">
+          <div className="flex items-center justify-end">
+            <button
+              onClick={() => setShowRecipeCreator(true)}
+              className="px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2"
+              style={{ backgroundColor: ACCENT, color: "#FFFFFF" }}
+            >
+              <Plus className="w-4 h-4" /> Ajouter recette (YouTube + IA)
+            </button>
+          </div>
           {/* Filter tags */}
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4" style={{ color: MUTED }} />
@@ -707,6 +966,20 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
                 </div>
 
                 <CardContent className="p-4">
+                  {recipe.source === "custom" && (
+                    <div className="flex justify-end mb-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteCustomRecipe(recipe.id);
+                        }}
+                        className="p-1 rounded-md hover:bg-black/5"
+                        title="Supprimer la recette"
+                      >
+                        <Trash2 className="w-4 h-4" style={{ color: "#EF4444" }} />
+                      </button>
+                    </div>
+                  )}
                   <div className="flex items-center gap-1 mb-1.5 flex-wrap">
                     {recipe.tags.slice(0, 2).map((tag) => (
                       <Badge
@@ -917,6 +1190,13 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
                   >
                     Exporter
                   </button>
+                  <button
+                    onClick={() => setGroceryEditor({ mode: "create", categorie: "", article: "", quantite: "" })}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1"
+                    style={{ backgroundColor: "#111827", color: "#FFFFFF" }}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Ajouter
+                  </button>
                 </div>
               </div>
             </CardHeader>
@@ -962,29 +1242,54 @@ ${supermarche.length ? supermarche.join("\n") : "- (déjà acheté)"}`;
               {groceryRows.length > 0 && (
                 <div className="rounded-xl p-4" style={{ border: `1px solid ${BORDER}`, backgroundColor: "#FAFAFA" }}>
                   <p className="text-xs font-black tracking-wide text-gray-900 mb-3">LISTE SUPABASE (SYNC)</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {groceryRows.map((row) => (
-                      <label
-                        key={row.id}
-                        className="flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer transition-colors"
-                        style={{ backgroundColor: row.checked ? "#F0F0F0" : "transparent" }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!row.checked}
-                          onChange={() => toggleShoppingItem(row.id)}
-                          className="w-4 h-4 accent-green-600"
-                        />
-                        <span
-                          className="text-sm"
-                          style={{
-                            color: row.checked ? "#9CA3AF" : "#111827",
-                            textDecoration: row.checked ? "line-through" : "none",
-                          }}
-                        >
-                          {row.article}{row.quantite ? ` ${row.quantite}` : ""}
-                        </span>
-                      </label>
+                  <div className="space-y-3">
+                    {groupedGroceryRows.map((group) => (
+                      <div key={group.category} className="rounded-lg p-3" style={{ border: `1px solid ${BORDER}`, backgroundColor: "#FFFFFF" }}>
+                        <p className="text-[11px] font-black tracking-wide mb-2" style={{ color: ACCENT }}>
+                          {group.category}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {group.rows.map((row) => (
+                            <div
+                              key={row.id}
+                              className="flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer transition-colors"
+                              style={{ backgroundColor: row.checked ? "#F0F0F0" : "transparent" }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!row.checked}
+                                onChange={() => toggleShoppingItem(row.id)}
+                                className="w-4 h-4 accent-green-600"
+                              />
+                              <span
+                                className="text-sm"
+                                style={{
+                                  color: row.checked ? "#9CA3AF" : "#111827",
+                                  textDecoration: row.checked ? "line-through" : "none",
+                                }}
+                              >
+                                {row.article}{row.quantite ? ` ${row.quantite}` : ""}
+                              </span>
+                              <div className="ml-auto flex items-center gap-1">
+                                <button
+                                  onClick={() => setGroceryEditor({ mode: "edit", id: row.id, categorie: row.categorie, article: row.article, quantite: row.quantite || "" })}
+                                  className="p-1 rounded-md hover:bg-black/5"
+                                  title="Modifier"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" style={{ color: MUTED }} />
+                                </button>
+                                <button
+                                  onClick={() => removeGroceryRow(row.id)}
+                                  className="p-1 rounded-md hover:bg-black/5"
+                                  title="Supprimer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" style={{ color: "#EF4444" }} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>

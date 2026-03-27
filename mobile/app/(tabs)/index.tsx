@@ -16,7 +16,7 @@ import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
 import { useWorkoutStore, useWaterStore, useGamificationStore, useProgramStore } from '../../store';
 import { weeklyProgram, exercisesDB, type Exercise } from '../../constants/mockData';
-import { PROGRAMME_API, SEANCES_API } from '../../constants/api';
+import { PROGRAMME_API, SEANCES_API, WEEKLY_TRACKING_API } from '../../constants/api';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -777,19 +777,25 @@ export default function DashboardScreen() {
   const colors = getColors(isDark);
   const s = useMemo(() => getStyles(colors), [isDark]);
   const router = useRouter();
-  const { workoutStreakDays, checkAndResetWeekly } = useGamificationStore();
+  const { workoutStreakDays, checkAndResetWeekly, syncWorkoutStreakFromHistory } = useGamificationStore();
   const { checkStaleWorkout, savedWorkouts, clearExercises, startWorkout, addExercise, addExerciseFromProgram, syncSavedWorkoutsFromApi } = useWorkoutStore();
   const { fetchProgram } = useProgramStore();
-  const { current: waterCurrent, goal: waterGoal, addWater, checkAndResetDaily } = useWaterStore();
+  const { current: waterCurrent, goal: waterGoal, addWater, checkAndResetDaily, syncFromWeb } = useWaterStore();
   const [showStreak, setShowStreak] = useState(false);
   const [period, setPeriod] = useState<'J' | 'S' | 'M'>('J');
   const streakPulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    checkAndResetWeekly();
-    checkStaleWorkout();
-    checkAndResetDaily();
-    syncSavedWorkoutsFromApi(SEANCES_API);
+    const bootstrap = async () => {
+      checkAndResetWeekly();
+      checkStaleWorkout();
+      checkAndResetDaily();
+      await syncFromWeb(WEEKLY_TRACKING_API);
+      await syncSavedWorkoutsFromApi(SEANCES_API);
+      const dates = useWorkoutStore.getState().savedWorkouts.map((w) => w.date);
+      syncWorkoutStreakFromHistory(dates);
+    };
+    bootstrap();
   }, []);
 
   useEffect(() => {

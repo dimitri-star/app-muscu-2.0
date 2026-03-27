@@ -16,6 +16,7 @@ import { useThemeStore } from '../../store/theme';
 import { getColors } from '../../constants/theme';
 import { useNutritionStore, useWaterStore, getShortDayFromDate } from '../../store';
 import type { MealEntry } from '../../constants/mockData';
+import { WEEKLY_TRACKING_API } from '../../constants/api';
 
 // ─── Tab Switcher ─────────────────────────────────────────────────────────────
 
@@ -666,13 +667,14 @@ export default function NutritionScreen() {
   const colors = getColors(isDark);
   const styles = getNutritionStyles(colors);
   const { meals, goals, getTotals, getMealTotals, removeMeal, checkAndResetDaily } = useNutritionStore();
-  const { checkAndResetDaily: checkWaterDaily } = useWaterStore();
+  const { checkAndResetDaily: checkWaterDaily, syncFromWeb: syncWaterFromWeb } = useWaterStore();
   const [activeTab, setActiveTab] = useState<'nutrition' | 'hydratation'>('nutrition');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     checkAndResetDaily();
     checkWaterDaily();
+    syncWaterFromWeb(WEEKLY_TRACKING_API);
   }, []);
 
   const totals = getTotals();
