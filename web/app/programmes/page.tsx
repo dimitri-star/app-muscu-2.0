@@ -1026,7 +1026,6 @@ type HebdoMetric =
 
 type WeekCellState = Record<string, string>;
 
-const HEB_DO_STORAGE_KEY = "programme_suivi_hebdo_v2";
 const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const WEEK_STARTS = ["24 Mar 2026", "31 Mar 2026", "07 Avr 2026", "14 Avr 2026"];
 const WEEK_STARTS_ISO = ["2026-03-24", "2026-03-31", "2026-04-07", "2026-04-14"];
@@ -1067,12 +1066,6 @@ function SuiviTab() {
   const [cells, setCells] = useState<WeekCellState>({});
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(HEB_DO_STORAGE_KEY);
-      if (raw) setCells(JSON.parse(raw));
-    } catch {
-      // ignore
-    }
     fetch("/api/weekly-tracking")
       .then((r) => r.json())
       .then((rows: Array<Record<string, unknown>>) => {
@@ -1098,13 +1091,7 @@ function SuiviTab() {
   const setValue = (week: number, metric: HebdoMetric, day: number, value: string) => {
     setCells((prev) => {
       const key = `${week}_${metric}_${day}`;
-      const next = { ...prev, [key]: value };
-      try {
-        localStorage.setItem(HEB_DO_STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
+      return { ...prev, [key]: value };
     });
 
     const payload: Record<string, string | number | boolean | null> = {
@@ -1291,20 +1278,22 @@ export default function ProgrammesPage() {
     const todayIdx = (dow + 6) % 7; // 0=Lun,...,6=Dim
     return [todayIdx];
   });
-  const [seanceNotes, setSeanceNotes] = useState<Record<string, string>>(() => {
-    if (typeof window === "undefined") return {};
-    try { return JSON.parse(localStorage.getItem("bloc1_seance_notes") || "{}"); } catch { return {}; }
-  });
+  const [seanceNotes, setSeanceNotes] = useState<Record<string, string>>({});
   const [autoSeanceNotes, setAutoSeanceNotes] = useState<Record<string, string>>({});
   const [autoSeanceDetails, setAutoSeanceDetails] = useState<Record<string, ProgramAutoDetail>>({});
   const [selectedAutoDetail, setSelectedAutoDetail] = useState<ProgramAutoDetail | null>(null);
 
   const updateSeanceNote = (weekNum: number, dayIndex: number, exIndex: number, value: string) => {
+    const noteKey = `${weekNum}_${dayIndex}_${exIndex}`;
     setSeanceNotes((prev) => {
-      const next = { ...prev, [`${weekNum}_${dayIndex}_${exIndex}`]: value };
-      try { localStorage.setItem("bloc1_seance_notes", JSON.stringify(next)); } catch { /* ignore */ }
+      const next = { ...prev, [noteKey]: value };
       return next;
     });
+    fetch("/api/programme-notes", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ noteKey, noteValue: value }),
+    }).catch(() => {});
   };
 
   const toggleDay = (dayIndex: number) => {
@@ -1318,6 +1307,15 @@ export default function ProgrammesPage() {
       .then((r) => r.json())
       .then((data) => { setProgram(data); setIsLoading(false); })
       .catch(() => setIsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/programme-notes")
+      .then((r) => r.json())
+      .then((data: Record<string, string>) => {
+        if (data && typeof data === "object") setSeanceNotes(data);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {

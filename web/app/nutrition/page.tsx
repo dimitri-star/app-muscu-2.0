@@ -24,6 +24,7 @@ const ACCENT = "#1DB954";
 const CARD_BG = "#FFFFFF";
 const BORDER = "#E5E5E5";
 const MUTED = "#888888";
+const WEEK_SHORT = ["L", "M", "M", "J", "V", "S", "D"];
 
 type ShoppingItem = {
   id: string;
@@ -411,23 +412,14 @@ export default function NutritionPage() {
   const [exportToast, setExportToast] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("nutrition_shopping_list_checked");
-      if (raw) setShoppingChecked(JSON.parse(raw));
-    } catch {
-      // ignore corrupted local data
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("nutrition_custom_recipes_v1");
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) setCustomRecipes(parsed);
-    } catch {
-      // ignore corrupted local data
-    }
+    fetch("/api/recipes")
+      .then((r) => r.json())
+      .then((rows: AppRecipe[]) => {
+        if (Array.isArray(rows)) {
+          setCustomRecipes(rows.filter((row) => row?.source === "custom"));
+        }
+      })
+      .catch(() => setCustomRecipes([]));
   }, []);
 
   useEffect(() => {
@@ -454,11 +446,6 @@ export default function NutritionPage() {
 
   const saveCustomRecipes = (next: AppRecipe[]) => {
     setCustomRecipes(next);
-    try {
-      localStorage.setItem("nutrition_custom_recipes_v1", JSON.stringify(next));
-    } catch {
-      // ignore localStorage failures
-    }
   };
 
   const allTags = ["Tous", "Protéiné", "Low-carb", "Rapide", "Budget", "Pro-testo", "Petit-déj"];
@@ -482,11 +469,6 @@ export default function NutritionPage() {
     }
     setShoppingChecked((prev) => {
       const next = { ...prev, [id]: !prev[id] };
-      try {
-        localStorage.setItem("nutrition_shopping_list_checked", JSON.stringify(next));
-      } catch {
-        // ignore localStorage failures
-      }
       return next;
     });
   };
@@ -502,11 +484,6 @@ export default function NutritionPage() {
       return;
     }
     setShoppingChecked({});
-    try {
-      localStorage.setItem("nutrition_shopping_list_checked", JSON.stringify({}));
-    } catch {
-      // ignore localStorage failures
-    }
   };
 
   const formatDate = (date: Date) =>
@@ -633,6 +610,11 @@ Retourne UNIQUEMENT un JSON objet:
       };
       const merged = [next, ...customRecipes];
       saveCustomRecipes(merged);
+      await fetch("/api/recipes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
       setSelectedRecipe(next);
       setShowRecipeCreator(false);
       setRecipeYoutubeUrl("");
@@ -647,6 +629,11 @@ Retourne UNIQUEMENT un JSON objet:
   const deleteCustomRecipe = (id: number | string) => {
     const merged = customRecipes.filter((r) => r.id !== id);
     saveCustomRecipes(merged);
+    fetch("/api/recipes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: String(id) }),
+    }).catch(() => {});
     if (selectedRecipe?.id === id) setSelectedRecipe(null);
   };
 
@@ -712,30 +699,24 @@ Retourne UNIQUEMENT un JSON objet:
     const todayIso = new Date().toISOString().split("T")[0];
     const today = history.find((row) => row.date === todayIso)?.eau ?? 0;
 
-    const getIsoWeek = (dateStr: string) => {
-      const d = new Date(`${dateStr}T12:00:00`);
-      const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-      const dayNum = utc.getUTCDay() || 7;
-      utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
-      const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
-      const week = Math.ceil((((utc.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-      return { year: utc.getUTCFullYear(), week };
-    };
+    // Build current week (L->D) always visible.
+    const now = new Date();
+    const dow = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+    monday.setHours(0, 0, 0, 0);
 
-    const weeklyMap = new Map<string, { label: string; eau: number }>();
-    history.forEach((row) => {
-      const w = getIsoWeek(row.date);
-      const key = `${w.year}-W${String(w.week).padStart(2, "0")}`;
-      const prev = weeklyMap.get(key);
-      weeklyMap.set(key, {
-        label: `S${w.week}`,
-        eau: Number(((prev?.eau ?? 0) + row.eau).toFixed(2)),
-      });
+    const dayMap = new Map<string, number>();
+    history.forEach((row) => dayMap.set(row.date, row.eau));
+    const weekDayData = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const iso = d.toISOString().split("T")[0];
+      return {
+        day: WEEK_SHORT[i],
+        eau: Number((dayMap.get(iso) ?? 0).toFixed(2)),
+      };
     });
-    const weeklySeries = Array.from(weeklyMap.entries())
-      .map(([key, value]) => ({ key, ...value }))
-      .sort((a, b) => (a.key < b.key ? -1 : 1));
-    const last8Weeks = weeklySeries.slice(-8);
 
     let streak = 0;
     for (let i = history.length - 1; i >= 0; i -= 1) {
@@ -757,7 +738,7 @@ Retourne UNIQUEMENT un JSON objet:
       avg,
       streak,
       bestDay,
-      chartData: last8Weeks,
+      chartData: weekDayData,
       historyData: [...last14].reverse(),
     };
   }, [weeklyRows]);
@@ -1092,8 +1073,8 @@ Retourne UNIQUEMENT un JSON objet:
 
           <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base font-bold text-gray-900">Hydratation par semaine</CardTitle>
-              <p className="text-xs" style={{ color: MUTED }}>Barres hebdo + ligne objectif (2.5L × 7)</p>
+              <CardTitle className="text-base font-bold text-gray-900">Hydratation de la semaine (L → D)</CardTitle>
+              <p className="text-xs" style={{ color: MUTED }}>Barres par jour + ligne objectif quotidien</p>
             </CardHeader>
             <CardContent>
               {waterStats.chartData.length === 0 ? (
@@ -1101,18 +1082,24 @@ Retourne UNIQUEMENT un JSON objet:
               ) : (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={waterStats.chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke={MUTED} />
+                    <defs>
+                      <linearGradient id="waterWeekGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#4C9BE8" stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="#4C9BE8" stopOpacity={0.35} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="4 4" stroke={BORDER} vertical={false} />
+                    <XAxis dataKey="day" tick={{ fontSize: 11, fontWeight: 700 }} stroke={MUTED} />
                     <YAxis unit="L" tick={{ fontSize: 11 }} stroke={MUTED} />
                     <Tooltip
                       contentStyle={{ backgroundColor: "#FFFFFF", border: `1px solid ${BORDER}`, borderRadius: 8 }}
                       formatter={(value) => [`${Number(value).toFixed(1)} L`, "Eau"]}
                     />
-                    <ReferenceLine y={waterStats.targetWeekly} stroke={ACCENT} strokeDasharray="6 4" />
+                    <ReferenceLine y={waterStats.target} stroke={ACCENT} strokeDasharray="6 4" />
                     <Bar
                       dataKey="eau"
-                      radius={[6, 6, 0, 0]}
-                      fill="#4C9BE8"
+                      radius={[8, 8, 0, 0]}
+                      fill="url(#waterWeekGradient)"
                     />
                   </BarChart>
                 </ResponsiveContainer>

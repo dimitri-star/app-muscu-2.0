@@ -49,6 +49,7 @@ const getWeekStart = (date = new Date()) => {
 
 const toISO = (date: Date) => date.toISOString().split("T")[0];
 const weekLabel = (start: Date) => `S${Math.ceil((start.getDate() + 6) / 7)}`;
+const WEEK_SHORT = ["L", "M", "M", "J", "V", "S", "D"];
 
 type WeeklyRow = {
   semaine: number;
@@ -177,6 +178,19 @@ export default function DashboardPage() {
       .slice(-8)
       .map(([w, list]) => ({ week: weekLabel(new Date(w)), volume: Math.round(list.reduce((acc, s) => acc + s.totalVolume, 0)) }));
 
+    const weekDaysData = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(nowWeekStart);
+      d.setDate(nowWeekStart.getDate() + i);
+      const key = toISO(d);
+      const list = seances.filter((s) => s.date.slice(0, 10) === key);
+      const minutes = list.reduce((acc, s) => acc + (s.duration || 0), 0);
+      return {
+        day: WEEK_SHORT[i],
+        minutes,
+        sessions: list.length,
+      };
+    });
+
     const liftToken: Record<LiftOption, string[]> = {
       Bench: ["bench", "développé couché"],
       Dips: ["dips"],
@@ -220,6 +234,7 @@ export default function DashboardPage() {
       avgCalories,
       benchPressData,
       weeklyVolumeData,
+      weekDaysData,
       bodyWeightData,
       muscleFrequencyData,
       recentSessions: seances.slice(0, 6),
@@ -415,21 +430,27 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Weekly Volume */}
+        {/* Weekly Activity (L→D) */}
         <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold text-[#1A1A1A]">
-              Volume d&apos;entraînement
+              Activité semaine (L → D)
             </CardTitle>
             <p style={{ color: MUTED }} className="text-xs">
-              8 dernières semaines (kg)
+              Minutes et séances réalisées
             </p>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={data.weeklyVolumeData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                <XAxis dataKey="week" stroke={MUTED} tick={{ fontSize: 11 }} />
+              <BarChart data={data.weekDaysData}>
+                <defs>
+                  <linearGradient id="activityDayGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={ACCENT} stopOpacity={0.95} />
+                    <stop offset="100%" stopColor={ACCENT} stopOpacity={0.35} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="4 4" stroke={BORDER} vertical={false} />
+                <XAxis dataKey="day" stroke={MUTED} tick={{ fontSize: 11, fontWeight: 700 }} />
                 <YAxis stroke={MUTED} tick={{ fontSize: 11 }} />
                 <Tooltip
                   contentStyle={{
@@ -438,9 +459,20 @@ export default function DashboardPage() {
                     borderRadius: 8,
                     color: "#1A1A1A",
                   }}
-                  formatter={(v) => [`${Number(v).toLocaleString("fr-FR")} kg`, "Volume"]}
+                  formatter={(v, name, item) => {
+                    if (name === "minutes") return [`${Number(v)} min`, "Durée"];
+                    return [`${Number(v)} séance(s)`, "Séances"];
+                  }}
                 />
-                <Bar dataKey="volume" fill={ACCENT} radius={[4, 4, 0, 0]} opacity={0.9} />
+                <Bar dataKey="minutes" fill="url(#activityDayGradient)" radius={[8, 8, 0, 0]} />
+                <Line
+                  type="monotone"
+                  dataKey="sessions"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "#111827", strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: ACCENT }}
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

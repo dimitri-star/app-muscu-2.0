@@ -186,15 +186,21 @@ export const useWaterStore = create<WaterState>()(
               goal: state.goal,
             };
           });
-          const cloudToday = byDate.get(today);
-          if (typeof cloudToday === 'number') {
-            set({
-              current: cloudToday,
-              weekHistory: nextHistory,
-              lastResetDate: today,
-            });
-          } else {
-            set({ weekHistory: nextHistory });
+          const cloudToday = byDate.get(today) ?? 0;
+          const mergedToday = Math.max(state.current, cloudToday);
+          const mergedHistory = nextHistory.map((h) =>
+            h.date === today ? { ...h, amount: mergedToday } : h
+          );
+
+          set({
+            current: mergedToday,
+            weekHistory: mergedHistory,
+            lastResetDate: today,
+          });
+
+          // If local was ahead (e.g. app closed before request finished), heal cloud value.
+          if (mergedToday > cloudToday) {
+            syncHydrationToWeb(mergedToday);
           }
         } catch {
           // keep local values when offline
