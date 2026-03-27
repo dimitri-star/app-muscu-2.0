@@ -168,6 +168,11 @@ export const useWaterStore = create<WaterState>()(
         weekHistory: state.weekHistory,
         lastResetDate: state.lastResetDate,
       }),
+      // Called after AsyncStorage finishes loading the persisted state.
+      // Ensures daily reset fires even when the store hydrates after mount.
+      onRehydrateStorage: () => (state) => {
+        if (state) state.checkAndResetDaily();
+      },
     }
   )
 );

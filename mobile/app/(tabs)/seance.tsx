@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/theme';
 import { getColors, type ThemeColors } from '../../constants/theme';
 import { useWorkoutStore, useWaterStore, useProgramStore, useGamificationStore, useChronoStore, getShortDayFromDate } from '../../store';
+import type { ProgramExercise } from '../../store';
 import { weeklyProgram, exercisesDB } from '../../constants/mockData';
 import { PROGRAMME_API, SEANCES_API } from '../../constants/api';
 import type { WorkoutExercise, Exercise } from '../../constants/mockData';
@@ -87,9 +88,10 @@ function parseProgramRest(restStr: string): number {
 
 // ─── Sub-tab pill row ─────────────────────────────────────────────────────────
 
-type SeanceTab = 'seance' | 'chrono' | 'eau' | 'programme';
+type SeanceTab = 'seance' | 'course' | 'chrono' | 'eau' | 'programme';
 const SEANCE_TABS: { key: SeanceTab; label: string }[] = [
   { key: 'seance', label: 'Seance' },
+  { key: 'course', label: 'Course' },
   { key: 'chrono', label: 'Chrono' },
   { key: 'eau', label: 'Eau' },
   { key: 'programme', label: 'Programme' },
@@ -536,6 +538,7 @@ function SeanceContent() {
     morningEnergy: number;
     soreness: number;
     visibility: 'Tout le monde' | 'Amis' | 'Prive';
+    photos: string[];
   }) => {
     saveWorkout({ name: workoutName, duration: elapsedSeconds, exercises });
     completeWorkout();
@@ -562,6 +565,7 @@ function SeanceContent() {
                 morningEnergy: meta.morningEnergy,
                 soreness: meta.soreness,
                 visibility: meta.visibility,
+                photoCount: meta.photos?.length ?? 0,
               }
             : null,
           exercises,
@@ -572,6 +576,46 @@ function SeanceContent() {
     }
     setShowSaveModal(false);
     Alert.alert('Séance enregistrée !', 'Séance sauvegardée en local et synchronisée vers le web si dispo.');
+  };
+
+  const handleAbortWorkout = () => {
+    if (Platform.OS === 'web') {
+      const ok = typeof window !== 'undefined'
+        ? window.confirm('Abandonner la séance ? La progression en cours ne sera pas sauvegardée.')
+        : false;
+      if (ok) {
+        stopRestTimer();
+        clearExercises();
+        endWorkout();
+      }
+      return;
+    }
+    Alert.alert('Abandonner la séance ?', 'La progression en cours ne sera pas sauvegardée.', [
+      { text: 'Continuer', style: 'cancel' },
+      {
+        text: 'Abandonner',
+        style: 'destructive',
+        onPress: () => {
+          stopRestTimer();
+          clearExercises();
+          endWorkout();
+        },
+      },
+    ]);
+  };
+
+  const handleOpenSaveModal = () => {
+    if (exercises.length === 0) {
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') {
+          window.alert('Ajoute au moins un exercice avant de sauvegarder.');
+        }
+      } else {
+        Alert.alert('Aucun exercice', 'Ajoute au moins un exercice avant de sauvegarder.');
+      }
+      return;
+    }
+    setShowSaveModal(true);
   };
 
   if (!isActive) {
@@ -994,7 +1038,12 @@ function SeanceContent() {
     <View style={{ flex: 1 }}>
       {/* Active header */}
       <View style={activeStyles.activeHeader}>
-        <TouchableOpacity style={activeStyles.roundBtn} onPress={endWorkout}>
+        <TouchableOpacity
+          style={activeStyles.roundBtn}
+          onPress={handleAbortWorkout}
+          activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
           <Ionicons name="close" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={activeStyles.timerCenter}>
@@ -1003,7 +1052,9 @@ function SeanceContent() {
         </View>
         <TouchableOpacity
           style={activeStyles.roundBtn}
-          onPress={() => setShowSaveModal(true)}
+          onPress={handleOpenSaveModal}
+          activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons name="checkmark" size={20} color={colors.text} />
         </TouchableOpacity>
@@ -1605,6 +1656,624 @@ function ProgrammeContent({ onLaunch }: { onLaunch: () => void }) {
   );
 }
 
+// ─── TAB: COURSE ──────────────────────────────────────────────────────────────
+
+const ZONE_COLORS = ['#60A5FA', '#34D399', '#FCD34D', '#FB923C', '#EF4444'];
+const ZONE_SHORT = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'];
+
+type RunInterval = {
+  id: string;
+  durationMin: string;
+  zone: number; // 1–5
+  recoveryMin: string;
+  done: boolean;
+};
+
+function makeRunUid() {
+  return `ri_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function secToMinStr(sec: number): string {
+  return sec % 60 === 0 ? String(sec / 60) : (sec / 60).toFixed(1);
+}
+
+// Parse running intervals from web ProgramExercise[] (structured API data)
+function parseRunFromWebExercises(exercises: ProgramExercise[]): { name: string; intervals: RunInterval[]; notes: string } {
+  const noteLines: string[] = [];
+
+  for (const ex of exercises) {
+    const s = ex.sets ?? '';
+
+    // Pattern 1: "6×1' Z5 / 1' Z1" — explicit effort zone + recovery zone
+    const mFull = s.match(/(\d+)\s*[×x]\s*(\d+)'(\d*)?\s*Z(\d)\s*\/\s*(\d+)'(\d*)?\s*Z(\d)/i);
+    if (mFull) {
+      const count = parseInt(mFull[1]);
+      const effortSec = parseInt(mFull[2]) * 60 + (mFull[3] ? parseInt(mFull[3]) : 0);
+      const effortZone = Math.min(5, Math.max(1, parseInt(mFull[4])));
+      const recovSec = parseInt(mFull[5]) * 60 + (mFull[6] ? parseInt(mFull[6]) : 0);
+      if (ex.rest && ex.rest !== '--') noteLines.push(ex.rest);
+      return {
+        name: ex.name,
+        intervals: Array.from({ length: count }, () => ({
+          id: makeRunUid(),
+          durationMin: secToMinStr(effortSec),
+          zone: effortZone,
+          recoveryMin: secToMinStr(recovSec),
+          done: false,
+        })),
+        notes: noteLines.join(' · '),
+      };
+    }
+
+    // Pattern 2: "6×1' effort / 1' récup" — no explicit zones, zone from name
+    const mEffort = s.match(/(\d+)\s*[×x]\s*(\d+)'(\d*)?\s*(?:effort|Z\d).*\/\s*(\d+)'(\d*)?\s*(?:récup|Z\d)/i);
+    if (mEffort) {
+      const count = parseInt(mEffort[1]);
+      const effortSec = parseInt(mEffort[2]) * 60 + (mEffort[3] ? parseInt(mEffort[3]) : 0);
+      const recovSec = parseInt(mEffort[4]) * 60 + (mEffort[5] ? parseInt(mEffort[5]) : 0);
+      const zMatch = (ex.name + ' ' + s).match(/Z(\d)-?Z?(\d)?/i);
+      const zone = zMatch ? Math.min(5, Math.max(1, parseInt(zMatch[2] || zMatch[1]))) : 4;
+      if (ex.rest && ex.rest !== '--') noteLines.push(ex.rest);
+      return {
+        name: ex.name,
+        intervals: Array.from({ length: count }, () => ({
+          id: makeRunUid(),
+          durationMin: secToMinStr(effortSec),
+          zone,
+          recoveryMin: secToMinStr(recovSec),
+          done: false,
+        })),
+        notes: noteLines.join(' · '),
+      };
+    }
+
+    // Pattern 3: "N×T'" basic fractionné (no recovery specified)
+    const mBasic = s.match(/(\d+)\s*[×x]\s*(\d+)'(\d*)?/);
+    if (mBasic) {
+      const count = parseInt(mBasic[1]);
+      const effortSec = parseInt(mBasic[2]) * 60 + (mBasic[3] ? parseInt(mBasic[3]) : 0);
+      const zMatch = (ex.name + ' ' + s).match(/Z(\d)-?Z?(\d)?/i);
+      const zone = zMatch ? Math.min(5, Math.max(1, parseInt(zMatch[2] || zMatch[1]))) : 4;
+      if (ex.rest && ex.rest !== '--') noteLines.push(ex.rest);
+      return {
+        name: ex.name,
+        intervals: Array.from({ length: count }, () => ({
+          id: makeRunUid(),
+          durationMin: secToMinStr(effortSec),
+          zone,
+          recoveryMin: '1',
+          done: false,
+        })),
+        notes: noteLines.join(' · '),
+      };
+    }
+
+    // Pattern 4: "Z2 25-40 min" or "25-40 min Z2"
+    const mZ = s.match(/Z(\d)\s+(\d+)-?(\d+)?\s*min|(\d+)-?(\d+)?\s*min\s*Z(\d)/i);
+    if (mZ) {
+      const zone = Math.min(5, Math.max(1, parseInt(mZ[1] ?? mZ[6])));
+      const min1 = parseInt(mZ[2] ?? mZ[4]);
+      const min2 = (mZ[3] ?? mZ[5]) ? parseInt(mZ[3] ?? mZ[5]) : min1;
+      const avgMin = Math.round((min1 + min2) / 2);
+      if (ex.rest && ex.rest !== '--') noteLines.push(ex.rest);
+      return {
+        name: ex.name,
+        intervals: [{ id: makeRunUid(), durationMin: String(avgMin), zone, recoveryMin: '0', done: false }],
+        notes: noteLines.join(' · '),
+      };
+    }
+
+    // Not an interval exercise — collect as note
+    const info = [ex.name, s !== '--' && s ? s : '', ex.rest !== '--' && ex.rest ? ex.rest : ''].filter(Boolean).join(': ');
+    if (info) noteLines.push(info);
+  }
+
+  return {
+    name: 'Course',
+    intervals: [{ id: makeRunUid(), durationMin: '30', zone: 2, recoveryMin: '0', done: false }],
+    notes: noteLines.join('\n'),
+  };
+}
+
+// Fallback parser for local DayProgram.exercises (string[])
+function parseRunFromLocalDay(exercises: string[]): { name: string; intervals: RunInterval[]; notes: string } {
+  for (const ex of exercises) {
+    const mFrac = ex.match(/(\d+)\s*[×x]\s*(\d+)'(\d*)?/);
+    if (mFrac) {
+      const count = parseInt(mFrac[1]);
+      const effortSec = parseInt(mFrac[2]) * 60 + (mFrac[3] ? parseInt(mFrac[3]) : 0);
+      return {
+        name: `Fractionné ${count}×${mFrac[2]}'`,
+        intervals: Array.from({ length: count }, () => ({ id: makeRunUid(), durationMin: secToMinStr(effortSec), zone: 4, recoveryMin: '1', done: false })),
+        notes: '',
+      };
+    }
+    const mZ = ex.match(/Z(\d)\s+(\d+)-?(\d+)?\s*min/i);
+    if (mZ) {
+      const zone = Math.min(5, Math.max(1, parseInt(mZ[1])));
+      const avgMin = Math.round((parseInt(mZ[2]) + (mZ[3] ? parseInt(mZ[3]) : parseInt(mZ[2]))) / 2);
+      return { name: `Run Z${zone} ${avgMin}min`, intervals: [{ id: makeRunUid(), durationMin: String(avgMin), zone, recoveryMin: '0', done: false }], notes: '' };
+    }
+  }
+  return { name: 'Course', intervals: [{ id: makeRunUid(), durationMin: '30', zone: 2, recoveryMin: '0', done: false }], notes: '' };
+}
+
+function getCourseStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    idleContainer: { padding: 16 },
+    idleTitle: { color: colors.text, fontSize: 26, fontWeight: '700', marginBottom: 16 },
+    ctaBtn: { backgroundColor: colors.cta, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 12, borderWidth: 2, borderColor: colors.ctaText },
+    ctaBtnText: { color: colors.ctaText, fontSize: 16, fontWeight: '700' },
+    programBtn: { backgroundColor: colors.card, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 24, flexDirection: 'row', justifyContent: 'center', gap: 8 },
+    programBtnText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
+    sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 12 },
+    historyCard: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10 },
+    historyDate: { color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
+    historyName: { color: colors.text, fontSize: 15, fontWeight: '600', marginBottom: 6 },
+    historyMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    historyMetaText: { color: colors.textSecondary, fontSize: 13 },
+    activeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+    roundBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+    timerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    runTimer: { color: '#1DB954', fontSize: 20, fontWeight: '700', fontVariant: ['tabular-nums'] as const },
+    sessionNameTxt: { color: colors.text, fontSize: 20, fontWeight: '700', paddingHorizontal: 16, marginBottom: 12 },
+    scrollContent: { paddingHorizontal: 16, paddingBottom: Platform.OS === 'ios' ? 210 : 188 },
+    statsRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+    statCard: { flex: 1, backgroundColor: colors.card, borderRadius: 10, padding: 10, alignItems: 'center' },
+    statValue: { color: colors.text, fontSize: 16, fontWeight: '800', marginBottom: 2 },
+    statLabel: { color: colors.textSecondary, fontSize: 10, fontWeight: '600', textTransform: 'uppercase' as const },
+    tableCard: { backgroundColor: colors.card, borderRadius: 12, marginBottom: 12, overflow: 'hidden' as const },
+    tableHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 8, marginTop: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
+    colHead: { color: colors.textSecondary, fontSize: 10, fontWeight: '600', textTransform: 'uppercase' as const },
+    cNum: { width: 24, textAlign: 'center' as const },
+    cDur: { flex: 1, textAlign: 'center' as const },
+    cZone: { width: 48, textAlign: 'center' as const },
+    cRecov: { flex: 1, textAlign: 'center' as const },
+    cCheck: { width: 32, textAlign: 'center' as const },
+    intervalRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 5 },
+    rowNum: { color: colors.textSecondary, fontSize: 12, textAlign: 'center' as const, width: 24 },
+    setInput: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '600', backgroundColor: colors.input, borderRadius: 6, marginHorizontal: 2, paddingHorizontal: 2, paddingVertical: 6, textAlign: 'center' as const },
+    zoneBadge: { width: 42, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginHorizontal: 2 },
+    zoneTxt: { fontSize: 11, fontWeight: '800', color: '#fff' },
+    checkbox: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: colors.textTertiary, alignItems: 'center', justifyContent: 'center' },
+    checkboxDone: { backgroundColor: '#1DB954', borderColor: '#1DB954' },
+    addRowBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
+    addRowTxt: { color: colors.text, fontSize: 13, fontWeight: '500' },
+    notesCard: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 12 },
+    notesLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '600', textTransform: 'uppercase' as const, marginBottom: 8 },
+    notesInput: { color: colors.text, fontSize: 13, minHeight: 60 },
+  });
+}
+
+function CourseDayPicker({ visible, onClose, onSelectIndex }: {
+  visible: boolean;
+  onClose: () => void;
+  onSelectIndex: (dayIndex: number) => void;
+}) {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const s = useMemo(() => getDayPickerStyles(colors), [isDark]);
+  const { program: webProgram } = useProgramStore();
+
+  // Use web programme if available, else local fallback
+  const source = webProgram?.days ?? weeklyProgram;
+  const cardioDays = source
+    .map((d, i) => ({ day: d, index: i }))
+    .filter(({ day }) => day.type === 'cardio');
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={s.overlay} onPress={onClose}>
+        <Pressable style={s.sheet} onPress={() => {}}>
+          <View style={s.handle} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+            <Text style={[s.title, { marginBottom: 0, flex: 1 }]}>Charger depuis le programme</Text>
+            {webProgram && <Ionicons name="cloud-done-outline" size={16} color={colors.accent} />}
+          </View>
+          <ScrollView>
+            {cardioDays.map(({ day, index }) => {
+              const meta = 'exercises' in day && Array.isArray(day.exercises)
+                ? (typeof day.exercises[0] === 'string'
+                    ? (day.exercises as string[]).slice(0, 2).join(' · ')
+                    : (day.exercises as ProgramExercise[]).map((e) => `${e.name}: ${e.sets}`).slice(0, 2).join(' · '))
+                : '';
+              return (
+                <TouchableOpacity key={day.day} style={s.dayRow} onPress={() => { onSelectIndex(index); onClose(); }}>
+                  <View style={[s.dayBadge, { backgroundColor: day.color + '33' }]}>
+                    <Text style={[s.dayShort, { color: day.color }]}>{day.shortDay}</Text>
+                  </View>
+                  <View style={s.dayInfo}>
+                    <Text style={s.dayLabel}>{day.label}</Text>
+                    <Text style={s.dayMeta} numberOfLines={2}>{meta}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
+            <Text style={s.cancelText}>Annuler</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function CourseContent() {
+  const isDark = useThemeStore((s) => s.isDark);
+  const colors = getColors(isDark);
+  const cs = useMemo(() => getCourseStyles(colors), [isDark]);
+  const { savedWorkouts, saveWorkout } = useWorkoutStore();
+  const { completeWorkout } = useGamificationStore();
+  const { program: webProgram, fetchProgram, isLoading: programLoading } = useProgramStore();
+
+  const [isActive, setIsActive] = useState(false);
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [sessionName, setSessionName] = useState('Course');
+  const [intervals, setIntervals] = useState<RunInterval[]>([
+    { id: makeRunUid(), durationMin: '10', zone: 2, recoveryMin: '2', done: false },
+  ]);
+  const [notes, setNotes] = useState('');
+  const [km, setKm] = useState('');
+  const [pace, setPace] = useState(''); // "5:20" format
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showDayPicker, setShowDayPicker] = useState(false);
+  const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
+  const runTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Fetch programme from web API on mount (same behaviour as Séance tab)
+  useEffect(() => {
+    fetchProgram(PROGRAMME_API);
+  }, []);
+
+  useEffect(() => {
+    if (isActive) {
+      runTimerRef.current = setInterval(() => forceUpdate(), 1000);
+    } else {
+      if (runTimerRef.current) clearInterval(runTimerRef.current);
+    }
+    return () => { if (runTimerRef.current) clearInterval(runTimerRef.current); };
+  }, [isActive]);
+
+  const elapsedSeconds = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+  const totalWorkMin = intervals.reduce((s, i) => s + (parseFloat(i.durationMin) || 0), 0);
+  const totalRestMin = intervals.reduce((s, i) => s + (parseFloat(i.recoveryMin) || 0), 0);
+  const doneCount = intervals.filter((i) => i.done).length;
+
+  const addInterval = () => {
+    const last = intervals[intervals.length - 1];
+    setIntervals((prev) => [
+      ...prev,
+      { id: makeRunUid(), durationMin: last?.durationMin ?? '5', zone: last?.zone ?? 2, recoveryMin: last?.recoveryMin ?? '1', done: false },
+    ]);
+  };
+
+  const removeInterval = (id: string) => setIntervals((prev) => prev.filter((i) => i.id !== id));
+  const updateInterval = (id: string, field: 'durationMin' | 'recoveryMin', value: string) => {
+    setIntervals((prev) => prev.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
+  };
+  const toggleDone = (id: string) => setIntervals((prev) => prev.map((i) => (i.id === id ? { ...i, done: !i.done } : i)));
+  const cycleZone = (id: string) => setIntervals((prev) => prev.map((i) => (i.id === id ? { ...i, zone: (i.zone % 5) + 1 } : i)));
+
+  const handleStart = () => { setStartTime(Date.now()); setIsActive(true); };
+
+  // Load day from programme — web data takes priority over local fallback
+  const handleLoadFromDayIndex = (dayIndex: number) => {
+    const webDay = webProgram?.days[dayIndex];
+    const localDay = weeklyProgram[dayIndex];
+    let parsed: { name: string; intervals: RunInterval[]; notes: string };
+    if (webDay && webDay.exercises.length > 0) {
+      parsed = parseRunFromWebExercises(webDay.exercises as ProgramExercise[]);
+    } else {
+      parsed = parseRunFromLocalDay(localDay.exercises);
+    }
+    setSessionName(parsed.name);
+    setIntervals(parsed.intervals);
+    setNotes(parsed.notes);
+  };
+
+  const resetCourseDraft = () => {
+    setIsActive(false);
+    setStartTime(null);
+    setIntervals([{ id: makeRunUid(), durationMin: '10', zone: 2, recoveryMin: '2', done: false }]);
+    setNotes('');
+    setSessionName('Course');
+    setKm('');
+    setPace('');
+  };
+
+  // Opens the save modal (checkmark button)
+  const handleOpenSaveModal = () => setShowSaveModal(true);
+
+  // Called from SaveWorkoutModal when the user confirms
+  const handleConfirmSave = async (meta: {
+    title: string;
+    description: string;
+    tags: string[];
+    effortRating: number;
+    energyRating: number;
+    moodRating: number;
+    sleepHours: string;
+    sleepQuality: number;
+    morningEnergy: number;
+    soreness: number;
+    visibility: 'Tout le monde' | 'Amis' | 'Prive';
+    photos: string[];
+  }) => {
+    const durationMin = Math.max(1, Math.round(elapsedSeconds / 60));
+    const today = new Date().toISOString().split('T')[0];
+    const fullNotes = [meta.description, notes].filter(Boolean).join('\n');
+    const runExercise: WorkoutExercise = {
+      id: makeRunUid(),
+      exercise: { id: 'cardio_run', name: meta.title || sessionName, muscleGroup: 'Cardio', category: 'Cardio', equipment: 'Extérieur' },
+      sets: intervals.map((i) => ({
+        id: makeRunUid(),
+        reps: Math.round((parseFloat(i.durationMin) || 0) * 60),
+        weight: Math.round((parseFloat(i.recoveryMin) || 0) * 60),
+        rpe: i.zone,
+        done: i.done,
+      })),
+      restTime: 0,
+      notes: fullNotes,
+    };
+    saveWorkout({ name: meta.title || sessionName, duration: elapsedSeconds, exercises: [runExercise] });
+    completeWorkout();
+    try {
+      await fetch(SEANCES_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: `mobile_run_${Date.now()}`,
+          name: meta.title || sessionName,
+          date: today,
+          duration: durationMin,
+          source: 'mobile_course',
+          rpeMax: meta.effortRating ?? null,
+          notes: fullNotes,
+          sessionMeta: {
+            tags: meta.tags,
+            effortRating: meta.effortRating,
+            energyRating: meta.energyRating,
+            moodRating: meta.moodRating,
+            sleepHours: meta.sleepHours,
+            sleepQuality: meta.sleepQuality,
+            morningEnergy: meta.morningEnergy,
+            soreness: meta.soreness,
+            visibility: meta.visibility,
+            photoCount: meta.photos?.length ?? 0,
+            km: km || null,
+            pace: pace || null,
+          },
+          exercises: [{
+            name: meta.title || sessionName,
+            sets: intervals.map((i) => ({
+              reps: Math.round((parseFloat(i.durationMin) || 0) * 60),
+              weight: Math.round((parseFloat(i.recoveryMin) || 0) * 60),
+              rpe: i.zone,
+              done: i.done,
+            })),
+          }],
+        }),
+      });
+    } catch {}
+    setShowSaveModal(false);
+    resetCourseDraft();
+    Alert.alert('Course enregistrée !', 'Sauvegardée en local et synchronisée.');
+  };
+
+  const handleAbortCourse = () => {
+    if (Platform.OS === 'web') {
+      const ok = typeof window !== 'undefined'
+        ? window.confirm('Supprimer la course en cours et revenir en arrière ?')
+        : false;
+      if (ok) resetCourseDraft();
+      return;
+    }
+
+    Alert.alert('Abandonner ?', 'La session ne sera pas sauvegardée.', [
+      { text: 'Continuer', style: 'cancel' },
+      { text: 'Abandonner', style: 'destructive', onPress: resetCourseDraft },
+    ]);
+  };
+
+  const recentRuns = savedWorkouts
+    .filter((w) => w.exercises?.[0]?.exercise?.muscleGroup === 'Cardio')
+    .slice(0, 5);
+
+  if (!isActive) {
+    return (
+      <>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={cs.idleContainer} showsVerticalScrollIndicator={false}>
+          {/* Sync status (mirrors Séance tab) */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.card, borderRadius: 10, padding: 10, marginBottom: 16 }}>
+            <Ionicons name={webProgram ? 'cloud-done-outline' : 'cloud-offline-outline'} size={16} color={webProgram ? colors.accent : colors.textTertiary} />
+            <Text style={{ flex: 1, color: colors.textSecondary, fontSize: 12 }}>
+              {programLoading ? 'Synchronisation...' : webProgram ? `Synchronisé — ${webProgram.name}` : 'Programme local (non synchronisé)'}
+            </Text>
+            <TouchableOpacity onPress={() => fetchProgram(PROGRAMME_API)} disabled={programLoading}>
+              <Ionicons name="sync-outline" size={16} color={colors.accent} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={cs.idleTitle}>Course</Text>
+          <TouchableOpacity style={cs.ctaBtn} onPress={handleStart} activeOpacity={0.85}>
+            <Text style={cs.ctaBtnText}>Commencer une session libre</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={cs.programBtn} onPress={() => setShowDayPicker(true)} activeOpacity={0.85}>
+            <Ionicons name="list-outline" size={18} color={colors.accent} />
+            <Text style={cs.programBtnText}>Charger depuis le programme</Text>
+          </TouchableOpacity>
+          {recentRuns.length > 0 && (
+            <>
+              <Text style={cs.sectionTitle}>Sessions récentes</Text>
+              {recentRuns.map((w) => (
+                <View key={w.id} style={cs.historyCard}>
+                  <Text style={cs.historyDate}>{w.date}</Text>
+                  <Text style={cs.historyName}>{w.name}</Text>
+                  <View style={cs.historyMeta}>
+                    <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
+                    <Text style={cs.historyMetaText}>{w.duration} min</Text>
+                    <Text style={cs.historyMetaText}>·</Text>
+                    <Text style={cs.historyMetaText}>{w.exercises?.[0]?.sets?.length ?? 0} intervalles</Text>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+        <CourseDayPicker
+          visible={showDayPicker}
+          onClose={() => setShowDayPicker(false)}
+          onSelectIndex={(idx) => { handleLoadFromDayIndex(idx); handleStart(); }}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <View style={cs.activeHeader}>
+        <TouchableOpacity
+          style={cs.roundBtn}
+          onPress={handleAbortCourse}
+          activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="close" size={18} color={colors.text} />
+        </TouchableOpacity>
+        <View style={cs.timerCenter}>
+          <Ionicons name="walk-outline" size={16} color="#1DB954" />
+          <Text style={cs.runTimer}>{formatTime(elapsedSeconds)}</Text>
+        </View>
+        <TouchableOpacity style={cs.roundBtn} onPress={handleOpenSaveModal}>
+          <Ionicons name="checkmark" size={20} color="#1DB954" />
+        </TouchableOpacity>
+      </View>
+
+      <Text style={cs.sessionNameTxt}>{sessionName}</Text>
+
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={cs.scrollContent} keyboardShouldPersistTaps="handled">
+        {/* Km + Allure card */}
+        <View style={[cs.tableCard, { flexDirection: 'row', gap: 0, padding: 0, overflow: 'hidden' }]}>
+          <View style={{ flex: 1, padding: 14, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: '#ffffff22' }}>
+            <Text style={[cs.notesLabel, { marginBottom: 6 }]}>Distance (km)</Text>
+            <TextInput
+              style={{ color: colors.text, fontSize: 22, fontWeight: '800' }}
+              value={km}
+              onChangeText={setKm}
+              placeholder="0.0"
+              placeholderTextColor={colors.textTertiary}
+              keyboardType="decimal-pad"
+            />
+          </View>
+          <View style={{ flex: 1, padding: 14 }}>
+            <Text style={[cs.notesLabel, { marginBottom: 6 }]}>Allure (min/km)</Text>
+            <TextInput
+              style={{ color: colors.text, fontSize: 22, fontWeight: '800' }}
+              value={pace}
+              onChangeText={setPace}
+              placeholder="5:30"
+              placeholderTextColor={colors.textTertiary}
+              keyboardType="numbers-and-punctuation"
+            />
+          </View>
+        </View>
+
+        {/* Stats */}
+        <View style={cs.statsRow}>
+          <View style={cs.statCard}>
+            <Text style={cs.statValue}>{totalWorkMin % 1 === 0 ? totalWorkMin : totalWorkMin.toFixed(1)}'</Text>
+            <Text style={cs.statLabel}>Effort</Text>
+          </View>
+          <View style={cs.statCard}>
+            <Text style={cs.statValue}>{totalRestMin % 1 === 0 ? totalRestMin : totalRestMin.toFixed(1)}'</Text>
+            <Text style={cs.statLabel}>Récup</Text>
+          </View>
+          <View style={cs.statCard}>
+            <Text style={cs.statValue}>{doneCount}/{intervals.length}</Text>
+            <Text style={cs.statLabel}>Fait</Text>
+          </View>
+        </View>
+
+        {/* Interval table */}
+        <View style={cs.tableCard}>
+          <View style={cs.tableHeader}>
+            <Text style={[cs.colHead, cs.cNum]}>#</Text>
+            <Text style={[cs.colHead, cs.cDur]}>Durée (min)</Text>
+            <Text style={[cs.colHead, cs.cZone]}>Zone</Text>
+            <Text style={[cs.colHead, cs.cRecov]}>Récup (min)</Text>
+            <Text style={[cs.colHead, cs.cCheck]}>✓</Text>
+          </View>
+          {intervals.map((interval, idx) => (
+            <View key={interval.id} style={cs.intervalRow}>
+              {intervals.length > 1 ? (
+                <TouchableOpacity style={{ width: 24, alignItems: 'center' }} onPress={() => removeInterval(interval.id)}>
+                  <Ionicons name="remove-circle" size={16} color={colors.error} />
+                </TouchableOpacity>
+              ) : (
+                <Text style={cs.rowNum}>{idx + 1}</Text>
+              )}
+              <TextInput
+                style={[cs.setInput, cs.cDur]}
+                value={interval.durationMin}
+                keyboardType="decimal-pad"
+                onChangeText={(v) => updateInterval(interval.id, 'durationMin', v)}
+                placeholderTextColor={colors.textTertiary}
+              />
+              <TouchableOpacity
+                style={[cs.zoneBadge, { backgroundColor: ZONE_COLORS[interval.zone - 1] }]}
+                onPress={() => cycleZone(interval.id)}
+              >
+                <Text style={cs.zoneTxt}>{ZONE_SHORT[interval.zone - 1]}</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={[cs.setInput, cs.cRecov]}
+                value={interval.recoveryMin}
+                keyboardType="decimal-pad"
+                onChangeText={(v) => updateInterval(interval.id, 'recoveryMin', v)}
+                placeholderTextColor={colors.textTertiary}
+              />
+              <TouchableOpacity style={{ width: 32, alignItems: 'center' }} onPress={() => toggleDone(interval.id)}>
+                <View style={[cs.checkbox, interval.done && cs.checkboxDone]}>
+                  {interval.done && <Ionicons name="checkmark" size={14} color="#fff" />}
+                </View>
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity style={cs.addRowBtn} onPress={addInterval}>
+            <Ionicons name="add" size={16} color={colors.text} />
+            <Text style={cs.addRowTxt}>Ajouter un intervalle</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Notes */}
+        <View style={cs.notesCard}>
+          <Text style={cs.notesLabel}>Notes</Text>
+          <TextInput
+            style={cs.notesInput}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Sensations, allure, commentaires..."
+            placeholderTextColor={colors.textTertiary}
+            multiline
+          />
+        </View>
+      </ScrollView>
+
+      {/* Save modal — reuses SaveWorkoutModal in course mode */}
+      <SaveWorkoutModal
+        visible={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+        onSave={handleConfirmSave}
+        workoutData={{ name: sessionName, duration: elapsedSeconds, exercises: [], startTime: new Date().toISOString() }}
+        courseData={{ km, pace, intervalCount: intervals.length, totalWorkMin }}
+      />
+    </>
+  );
+}
+
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 
 export default function SeanceScreen() {
@@ -1633,6 +2302,9 @@ export default function SeanceScreen() {
         {/* Keep all tabs mounted — display:none hides without unmounting, preserving state */}
         <View style={{ flex: 1, display: activeTab === 'seance' ? 'flex' : 'none' }}>
           <SeanceContent />
+        </View>
+        <View style={{ flex: 1, display: activeTab === 'course' ? 'flex' : 'none' }}>
+          <CourseContent />
         </View>
         <View style={{ flex: 1, display: activeTab === 'chrono' ? 'flex' : 'none' }}>
           <ChronoContent />

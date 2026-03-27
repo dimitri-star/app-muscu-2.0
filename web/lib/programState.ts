@@ -107,8 +107,8 @@ const DEFAULT_PROGRAM: Program = {
       label: 'Run Fractionné',
       color: '#EF4444',
       exercises: [
-        { id: 'e23', name: 'Fractionné Z4-Z5', sets: '6×1\' → 8×1\'30 effort / 1\' récup', rest: 'PAS à jeun — collation avant' },
-        { id: 'e24', name: 'Allure effort', sets: '4:30-4:50 /km | récup marche/jogging', rest: 'S4 : Z2 léger 25-30min' },
+        { id: 'e23', name: 'Run fractionné (PAS à jeun)', sets: '6×1\' Z5 / 1\' Z1', rest: 'Collation 45-60 min avant' },
+        { id: 'e24', name: 'RPE cible', sets: '7-8', rest: 'Allure effort 4:30-4:50 /km | récup marche/jogging Z1' },
       ],
     },
     {

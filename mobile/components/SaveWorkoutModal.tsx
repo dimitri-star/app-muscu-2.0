@@ -25,6 +25,14 @@ interface WorkoutData {
   startTime: string;
 }
 
+// Optional running-specific stats shown instead of weight/volume grid
+export interface CourseModalData {
+  km: string;
+  pace: string;        // "5:20" or ""
+  intervalCount: number;
+  totalWorkMin: number;
+}
+
 interface SaveWorkoutModalProps {
   visible: boolean;
   onClose: () => void;
@@ -40,8 +48,10 @@ interface SaveWorkoutModalProps {
     morningEnergy: number;
     soreness: number;
     visibility: VisibilityOption;
+    photos: string[];
   }) => void;
   workoutData: WorkoutData;
+  courseData?: CourseModalData; // when provided → running mode
 }
 
 const TAGS = [
@@ -89,6 +99,7 @@ export default function SaveWorkoutModal({
   onClose,
   onSave,
   workoutData,
+  courseData,
 }: SaveWorkoutModalProps) {
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
@@ -189,14 +200,22 @@ export default function SaveWorkoutModal({
     ]);
   };
 
-  const STAT_GRID = [
-    { label: 'Volume total', value: `${Math.round(stats.volume)} kg` },
-    { label: 'Exercices', value: String(workoutData.exercises.length) },
-    { label: 'Series', value: String(stats.totalSets) },
-    { label: 'Duree', value: formatDuration(workoutData.duration) },
-    { label: 'Total reps', value: String(stats.totalReps) },
-    { label: 'Poids max', value: `${stats.maxWeight} kg` },
-  ];
+  const STAT_GRID = courseData
+    ? [
+        { label: 'Distance', value: courseData.km ? `${courseData.km} km` : '—' },
+        { label: 'Allure moy.', value: courseData.pace ? `${courseData.pace} /km` : '—' },
+        { label: 'Durée', value: formatDuration(workoutData.duration) },
+        { label: 'Intervalles', value: String(courseData.intervalCount) },
+        { label: 'Effort total', value: `${courseData.totalWorkMin % 1 === 0 ? courseData.totalWorkMin : courseData.totalWorkMin.toFixed(1)} min` },
+      ]
+    : [
+        { label: 'Volume total', value: `${Math.round(stats.volume)} kg` },
+        { label: 'Exercices', value: String(workoutData.exercises.length) },
+        { label: 'Series', value: String(stats.totalSets) },
+        { label: 'Duree', value: formatDuration(workoutData.duration) },
+        { label: 'Total reps', value: String(stats.totalReps) },
+        { label: 'Poids max', value: `${stats.maxWeight} kg` },
+      ];
 
   return (
     <Modal
@@ -209,7 +228,7 @@ export default function SaveWorkoutModal({
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: colors.separator }]}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>
-            Enregistrer l'entrainement
+            {courseData ? 'Enregistrer la course' : "Enregistrer l'entrainement"}
           </Text>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
             <Ionicons name="close" size={24} color={colors.text} />
@@ -516,6 +535,7 @@ export default function SaveWorkoutModal({
                 morningEnergy,
                 soreness,
                 visibility,
+                photos,
               })
             }
             activeOpacity={0.85}
