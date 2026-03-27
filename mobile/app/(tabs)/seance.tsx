@@ -1904,7 +1904,7 @@ function CourseContent() {
   const isDark = useThemeStore((s) => s.isDark);
   const colors = getColors(isDark);
   const cs = useMemo(() => getCourseStyles(colors), [isDark]);
-  const { savedWorkouts, saveWorkout } = useWorkoutStore();
+  const { savedWorkouts, saveWorkout, deleteWorkout } = useWorkoutStore();
   const { completeWorkout } = useGamificationStore();
   const { program: webProgram, fetchProgram, isLoading: programLoading } = useProgramStore();
 
@@ -2010,7 +2010,8 @@ function CourseContent() {
       sets: intervals.map((i) => ({
         id: makeRunUid(),
         reps: Math.round((parseFloat(i.durationMin) || 0) * 60),
-        weight: Math.round((parseFloat(i.recoveryMin) || 0) * 60),
+        // For running sessions, keep "weight" at 0 to avoid fake volume in kg.
+        weight: 0,
         rpe: i.zone,
         done: i.done,
       })),
@@ -2049,7 +2050,7 @@ function CourseContent() {
             name: meta.title || sessionName,
             sets: intervals.map((i) => ({
               reps: Math.round((parseFloat(i.durationMin) || 0) * 60),
-              weight: Math.round((parseFloat(i.recoveryMin) || 0) * 60),
+              weight: 0,
               rpe: i.zone,
               done: i.done,
             })),
@@ -2081,6 +2082,44 @@ function CourseContent() {
     .filter((w) => w.exercises?.[0]?.exercise?.muscleGroup === 'Cardio')
     .slice(0, 5);
 
+  const handleDeleteRun = (id: string) => {
+    if (Platform.OS === 'web') {
+      const ok = typeof window !== 'undefined'
+        ? window.confirm('Supprimer cette séance de course ?')
+        : false;
+      if (!ok) return;
+      deleteWorkout(id);
+      fetch(SEANCES_API, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      }).catch(() => {
+        // local deletion is still completed
+      });
+      return;
+    }
+
+    Alert.alert('Supprimer la séance ?', 'Cette séance sera retirée de ton historique.', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          deleteWorkout(id);
+          try {
+            await fetch(SEANCES_API, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id }),
+            });
+          } catch {
+            // local deletion is still completed
+          }
+        },
+      },
+    ]);
+  };
+
   if (!isActive) {
     return (
       <>
@@ -2109,7 +2148,16 @@ function CourseContent() {
               <Text style={cs.sectionTitle}>Sessions récentes</Text>
               {recentRuns.map((w) => (
                 <View key={w.id} style={cs.historyCard}>
-                  <Text style={cs.historyDate}>{w.date}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={cs.historyDate}>{w.date}</Text>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteRun(w.id)}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      style={{ paddingHorizontal: 6, paddingVertical: 4 }}
+                    >
+                      <Ionicons name="trash-outline" size={15} color={colors.error} />
+                    </TouchableOpacity>
+                  </View>
                   <Text style={cs.historyName}>{w.name}</Text>
                   <View style={cs.historyMeta}>
                     <Ionicons name="time-outline" size={13} color={colors.textSecondary} />

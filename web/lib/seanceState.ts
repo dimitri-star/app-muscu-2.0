@@ -16,7 +16,7 @@ export interface SavedSeance {
   duration: number; // minutes
   totalVolume: number; // kg
   totalSets: number;
-  source: "mobile" | "web" | "programme";
+  source: "mobile" | "web" | "programme" | "mobile_course";
   rpeMax?: number | null;
   notes?: string;
   sessionMeta?: {
@@ -29,6 +29,9 @@ export interface SavedSeance {
     morningEnergy?: number;
     soreness?: number;
     visibility?: "Tout le monde" | "Amis" | "Prive";
+    photoCount?: number;
+    autoSummary?: string;
+    source?: "mobile" | "web" | "programme" | "mobile_course";
   } | null;
   exercises: SavedSeanceExercise[];
 }

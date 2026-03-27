@@ -39,23 +39,30 @@ function inferMuscleGroup(name: string): string {
 }
 
 function seanceToDisplayWorkout(s: SavedSeance) {
+  const isCourse = s.source === "mobile_course";
   const topExercises = s.exercises
     .slice(0, 3)
     .map((ex) => {
+      if (isCourse) {
+        const totalMin = ex.sets.reduce((acc, set) => acc + (set.reps || 0), 0);
+        return totalMin > 0 ? `${ex.name} ${totalMin} min` : ex.name;
+      }
       const doneSet = ex.sets.find((set) => set.done && set.weight > 0);
       return doneSet ? `${ex.name} ${doneSet.weight}kg x${doneSet.reps}` : ex.name;
     });
+  const km = (s.sessionMeta as { km?: string | null } | null)?.km;
   return {
     id: s.id,
     title: s.name,
     date: formatDate(s.date),
     isoDate: s.date,
     duration: formatDuration(s.duration),
-    volume: formatVolume(s.totalVolume),
+    volume: isCourse ? (km ? `${km} km` : "Course") : formatVolume(s.totalVolume),
     exerciseCount: s.exercises.length,
-    muscleGroup: inferMuscleGroup(s.name),
+    muscleGroup: isCourse ? "Cardio" : inferMuscleGroup(s.name),
     topExercises,
     source: s.source,
+    isCourse,
   };
 }
 
@@ -74,6 +81,92 @@ function exportToCSV(workouts: ReturnType<typeof seanceToDisplayWorkout>[]) {
   const a = document.createElement("a");
   a.href = url;
   a.download = `seances_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function getCycleWeekLabel(iso: string, cycleStartIso: string): string {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const delta = Math.max(0, Math.floor((new Date(iso).getTime() - new Date(cycleStartIso).getTime()) / dayMs));
+  return `S${Math.floor(delta / 7) + 1}`;
+}
+
+function getFrenchDayShort(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  const map = ["DIM", "LUN", "MAR", "MER", "JEU", "VEN", "SAM"];
+  return map[d.getDay()] ?? "";
+}
+
+function formatSetString(sets: { reps: number; weight: number; done: boolean }[]): string {
+  if (!sets.length) return "";
+  const done = sets.filter((s) => s.done);
+  const source = done.length > 0 ? done : sets;
+  return `${source.length}x${source[0]?.reps ?? 0}`;
+}
+
+function formatChargeString(sets: { reps: number; weight: number; done: boolean }[]): string {
+  if (!sets.length) return "";
+  const done = sets.filter((s) => s.done);
+  const source = done.length > 0 ? done : sets;
+  const unique = Array.from(new Set(source.map((s) => Number(s.weight || 0)).filter((w) => w > 0)));
+  if (!unique.length) return "";
+  return unique.length === 1 ? `${unique[0]} kg` : `${Math.min(...unique)}-${Math.max(...unique)} kg`;
+}
+
+function exportCoachCSV(seances: SavedSeance[]) {
+  if (!seances.length) return;
+  const sorted = [...seances].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const cycleStart = sorted[0].date;
+
+  const headers = ["Sem", "Jour", "Date", "Seance", "Exercice", "Format", "RPE", "Charge/Cible", "Repos", "Consignes", "Notes"];
+  const rows: string[][] = [];
+
+  sorted.forEach((s) => {
+    const sem = getCycleWeekLabel(s.date, cycleStart);
+    const jour = getFrenchDayShort(s.date);
+    const rpeSeance = typeof s.rpeMax === "number" ? String(s.rpeMax) : "";
+    const meta = s.sessionMeta ?? {};
+    const metaNotes = [
+      typeof meta.energyRating === "number" ? `Energie ${meta.energyRating}/5` : "",
+      typeof meta.moodRating === "number" ? `Humeur ${meta.moodRating}/5` : "",
+      meta.sleepHours ? `Sommeil ${meta.sleepHours}h` : "",
+      typeof meta.sleepQuality === "number" ? `Qualite ${meta.sleepQuality}/5` : "",
+      typeof meta.soreness === "number" ? `Courbatures ${meta.soreness}/5` : "",
+      meta.autoSummary ? `Synthese ${meta.autoSummary}` : "",
+      s.notes ? `Note seance: ${s.notes}` : "",
+    ].filter(Boolean).join(" | ");
+
+    if (!s.exercises.length) {
+      rows.push([sem, jour, s.date, s.name, "", "", rpeSeance, "", "", "", metaNotes]);
+      return;
+    }
+
+    s.exercises.forEach((ex, idx) => {
+      rows.push([
+        sem,
+        jour,
+        s.date,
+        idx === 0 ? s.name : "",
+        ex.name,
+        formatSetString(ex.sets),
+        rpeSeance,
+        formatChargeString(ex.sets),
+        "",
+        "",
+        [ex.notes ? `Note exo: ${ex.notes}` : "", idx === 0 ? metaNotes : ""].filter(Boolean).join(" | "),
+      ]);
+    });
+  });
+
+  const csvContent = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(";"))
+    .join("\n");
+
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `plan_v4_coach_${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -145,6 +238,14 @@ export default function EntrainementsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => exportCoachCSV(rawSeances)}
+            className="font-semibold flex items-center gap-2"
+            style={{ borderColor: "rgba(29,185,84,0.45)", color: ACCENT }}
+          >
+            <Download className="w-4 h-4" /> Export Coach (V4)
+          </Button>
           <Button
             variant="outline"
             onClick={() => exportToCSV(filtered)}
@@ -221,15 +322,15 @@ export default function EntrainementsPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: "rgba(29,185,84,0.15)" }}>
-                      {workout.source === "mobile" ? (
+                      {workout.source === "mobile" || workout.source === "mobile_course" ? (
                         <Smartphone className="w-5 h-5" style={{ color: ACCENT }} />
                       ) : (
                         <Dumbbell className="w-5 h-5" style={{ color: ACCENT }} />
                       )}
                     </div>
-                    {workout.source === "mobile" && (
+                    {(workout.source === "mobile" || workout.source === "mobile_course") && (
                       <span className="text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "rgba(29,185,84,0.15)", color: ACCENT }}>
-                        Mobile
+                        {workout.source === "mobile_course" ? "Course mobile" : "Mobile"}
                       </span>
                     )}
                   </div>
@@ -237,7 +338,7 @@ export default function EntrainementsPage() {
                     <Badge variant="outline" className="text-xs" style={{ borderColor: BORDER, color: MUTED }}>
                       {workout.date}
                     </Badge>
-                    {workout.source === "mobile" && (
+                    {(workout.source === "mobile" || workout.source === "mobile_course") && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -315,9 +416,9 @@ export default function EntrainementsPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      {w.source === "mobile" ? (
+                      {w.source === "mobile" || w.source === "mobile_course" ? (
                         <span className="flex items-center gap-1 text-xs font-medium" style={{ color: ACCENT }}>
-                          <Smartphone className="w-3 h-3" /> Mobile
+                          <Smartphone className="w-3 h-3" /> {w.source === "mobile_course" ? "Course mobile" : "Mobile"}
                         </span>
                       ) : (
                         <span className="text-xs" style={{ color: MUTED }}>Web</span>
@@ -346,7 +447,11 @@ export default function EntrainementsPage() {
                 <p className="text-xs" style={{ color: MUTED }}>{formatDate(selectedSeance.date)}</p>
                 <h3 className="text-xl font-bold text-gray-900 mt-1">{selectedSeance.name}</h3>
                 <p className="text-xs mt-1" style={{ color: MUTED }}>
-                  {selectedSeance.source === "mobile" ? "Source mobile" : "Source web"} · {selectedSeance.exercises.length} exercices
+                  {selectedSeance.source === "mobile_course"
+                    ? "Source course mobile"
+                    : selectedSeance.source === "mobile"
+                      ? "Source mobile"
+                      : "Source web"} · {selectedSeance.exercises.length} exercices
                 </p>
               </div>
               <Button variant="outline" onClick={() => setSelectedSeance(null)} style={{ borderColor: BORDER, color: MUTED }}>
@@ -378,6 +483,11 @@ export default function EntrainementsPage() {
                   ) : null}
                   {selectedSeance.sessionMeta && (
                     <div className="flex flex-wrap gap-2">
+                      {selectedSeance.sessionMeta.autoSummary && (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "rgba(29,185,84,0.14)", color: ACCENT }}>
+                          {selectedSeance.sessionMeta.autoSummary}
+                        </span>
+                      )}
                       {typeof selectedSeance.sessionMeta.effortRating === "number" && (
                         <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "rgba(29,185,84,0.14)", color: ACCENT }}>
                           Effort {selectedSeance.sessionMeta.effortRating}/10
@@ -425,7 +535,11 @@ export default function EntrainementsPage() {
                     {ex.sets.map((set, setIdx) => (
                       <div key={`${exIdx}_${setIdx}`} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: set.done ? "rgba(29,185,84,0.10)" : "#F8F8F8" }}>
                         <span className="text-xs font-semibold" style={{ color: MUTED }}>Série {setIdx + 1}</span>
-                        <span className="text-sm font-semibold text-gray-900">{set.weight > 0 ? `${set.weight} kg × ` : ""}{set.reps} reps</span>
+                        <span className="text-sm font-semibold text-gray-900">
+                          {selectedSeance.source === "mobile_course"
+                            ? `${set.reps} min`
+                            : `${set.weight > 0 ? `${set.weight} kg × ` : ""}${set.reps} reps`}
+                        </span>
                       </div>
                     ))}
                   </div>

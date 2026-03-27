@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { archivedPrograms } from "@/lib/mockData";
 import type { Program, ProgramDay, ProgramExercise, DayType } from "@/lib/programTypes";
+import type { SavedSeance } from "@/lib/seanceState";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,11 @@ function ExerciseRow({
       <p className="text-xs font-medium text-gray-900 leading-tight">{exercise.name}</p>
       <p className="text-xs mt-0.5" style={{ color }}>{exercise.sets}</p>
       <p className="text-xs" style={{ color: MUTED }}>Repos: {exercise.rest}</p>
+      {exercise.lastSessionSummary ? (
+        <p className="text-[11px] mt-1.5" style={{ color: "#1A5C35" }}>
+          Dernière séance{exercise.lastSessionDate ? ` (${exercise.lastSessionDate})` : ""}: {exercise.lastSessionSummary}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -458,11 +464,14 @@ const BLOC1_PROGRAMME: Record<number, JourBloc1[]> = {
 // ─── Day Accordion ────────────────────────────────────────────────────────────
 
 function DayAccordion({
-  jour, dayIndex, weekNum, isExpanded, onToggle, notes, onUpdateNote, isToday,
+  jour, dayIndex, weekNum, isExpanded, onToggle, notes, autoNotes, autoDetails, onOpenAutoDetail, onUpdateNote, isToday,
 }: {
   jour: JourBloc1; dayIndex: number; weekNum: number;
   isExpanded: boolean; onToggle: () => void;
   notes: Record<string, string>;
+  autoNotes: Record<string, string>;
+  autoDetails: Record<string, ProgramAutoDetail>;
+  onOpenAutoDetail: (detail: ProgramAutoDetail) => void;
   onUpdateNote: (exIndex: number, value: string) => void;
   isToday: boolean;
 }) {
@@ -512,8 +521,17 @@ function DayAccordion({
                 <tbody>
                   {jour.exercises.map((ex, ei) => {
                     const noteKey = `${weekNum}_${dayIndex}_${ei}`;
+                    const displayedNote = notes[noteKey] || autoNotes[noteKey] || "";
+                    const detail = autoDetails[noteKey];
                     return (
-                      <tr key={ei} style={{ borderBottom: ei < jour.exercises.length - 1 ? `1px solid ${BORDER}` : "none" }}>
+                      <tr
+                        key={ei}
+                        className={detail ? "cursor-pointer hover:bg-black/5 transition-colors" : ""}
+                        onClick={() => {
+                          if (detail) onOpenAutoDetail(detail);
+                        }}
+                        style={{ borderBottom: ei < jour.exercises.length - 1 ? `1px solid ${BORDER}` : "none" }}
+                      >
                         <td className="px-3 py-2.5 font-semibold text-gray-900 max-w-[160px]">{ex.nom}</td>
                         <td className="px-3 py-2.5 font-black whitespace-nowrap" style={{ color: jour.color }}>{ex.format}</td>
                         <td className="px-3 py-2.5 font-medium whitespace-nowrap" style={{ color: ex.rpe === "--" ? MUTED : "#EF4444" }}>{ex.rpe}</td>
@@ -524,15 +542,18 @@ function DayAccordion({
                           <input
                             type="text"
                             placeholder="Charge réelle, RPE, notes..."
-                            value={notes[noteKey] || ""}
+                            value={displayedNote}
                             onChange={(e) => onUpdateNote(ei, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onFocus={(e) => e.stopPropagation()}
                             className="w-full text-xs px-2 py-1.5 rounded-lg border outline-none focus:ring-1 transition-all"
                             style={{
-                              borderColor: notes[noteKey] ? jour.color + "60" : BORDER,
-                              backgroundColor: notes[noteKey] ? jour.color + "08" : "#F8F8F8",
+                              borderColor: displayedNote ? jour.color + "60" : BORDER,
+                              backgroundColor: displayedNote ? jour.color + "08" : "#F8F8F8",
                               color: "#333",
                             }}
                           />
+                          {detail ? <p className="mt-1 text-[11px]" style={{ color: MUTED }}>Clique la ligne pour voir le détail</p> : null}
                         </td>
                       </tr>
                     );
@@ -545,6 +566,65 @@ function DayAccordion({
       )}
     </Card>
   );
+}
+
+function normalizeLabel(v: string): string {
+  return String(v || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getWeekdayIndex(iso: string): number {
+  const d = new Date(`${iso}T12:00:00`);
+  return (d.getDay() + 6) % 7; // 0=Lun ... 6=Dim
+}
+
+type ProgramAutoDetail = {
+  key: string;
+  date: string;
+  seanceName: string;
+  exerciseName: string;
+  source: SavedSeance["source"];
+  note: string;
+  sessionNote: string;
+  rpeMax?: number | null;
+  energy?: number;
+  mood?: number;
+  sleepHours?: string;
+  soreness?: number;
+};
+
+function buildExerciseAutoNote(seance: SavedSeance, ex: SavedSeance["exercises"][number]): string {
+  const doneSets = (ex.sets || []).filter((s) => s.done);
+  const src = doneSets.length ? doneSets : ex.sets || [];
+  const reps = src.map((s) => Number(s.reps || 0)).filter((v) => Number.isFinite(v) && v > 0);
+  const weights = src.map((s) => Number(s.weight || 0)).filter((v) => Number.isFinite(v) && v > 0);
+  const meta = seance.sessionMeta || {};
+
+  if (seance.source === "mobile_course") {
+    const totalMin = reps.reduce((acc, v) => acc + v, 0);
+    const parts = [
+      totalMin > 0 ? `${totalMin} min` : "",
+      (meta as { km?: string | null }).km ? `${(meta as { km?: string | null }).km} km` : "",
+      (meta as { pace?: string | null }).pace ? `allure ${(meta as { pace?: string | null }).pace}` : "",
+      typeof seance.rpeMax === "number" ? `RPE ${seance.rpeMax}/10` : "",
+      ex.notes ? ex.notes : "",
+    ].filter(Boolean);
+    return parts.join(" | ");
+  }
+
+  const repsTxt = reps.length ? `${Math.min(...reps)}-${Math.max(...reps)} reps` : "";
+  const weightTxt = weights.length ? `${Math.min(...weights)}-${Math.max(...weights)} kg` : "";
+  const parts = [
+    repsTxt && weightTxt ? `${weightTxt} x ${repsTxt}` : (weightTxt || repsTxt),
+    typeof seance.rpeMax === "number" ? `RPE ${seance.rpeMax}/10` : "",
+    ex.notes ? ex.notes : "",
+    seance.notes ? `Séance: ${seance.notes}` : "",
+  ].filter(Boolean);
+  return parts.join(" | ");
 }
 
 // ─── Tab: Objectifs ───────────────────────────────────────────────────────────
@@ -1215,6 +1295,9 @@ export default function ProgrammesPage() {
     if (typeof window === "undefined") return {};
     try { return JSON.parse(localStorage.getItem("bloc1_seance_notes") || "{}"); } catch { return {}; }
   });
+  const [autoSeanceNotes, setAutoSeanceNotes] = useState<Record<string, string>>({});
+  const [autoSeanceDetails, setAutoSeanceDetails] = useState<Record<string, ProgramAutoDetail>>({});
+  const [selectedAutoDetail, setSelectedAutoDetail] = useState<ProgramAutoDetail | null>(null);
 
   const updateSeanceNote = (weekNum: number, dayIndex: number, exIndex: number, value: string) => {
     setSeanceNotes((prev) => {
@@ -1236,6 +1319,53 @@ export default function ProgrammesPage() {
       .then((data) => { setProgram(data); setIsLoading(false); })
       .catch(() => setIsLoading(false));
   }, []);
+
+  useEffect(() => {
+    const week = BLOC1_PROGRAMME[activeWeek];
+    if (!week) return;
+    fetch("/api/seances")
+      .then((r) => r.json())
+      .then((rows: SavedSeance[]) => {
+        if (!Array.isArray(rows)) return;
+        const next: Record<string, string> = {};
+        const details: Record<string, ProgramAutoDetail> = {};
+        const sorted = [...rows].sort((a, b) => (a.date < b.date ? 1 : -1));
+        sorted.forEach((seance) => {
+          const dayIndex = getWeekdayIndex(seance.date);
+          const day = week[dayIndex];
+          if (!day) return;
+          seance.exercises.forEach((sx) => {
+            const sxName = normalizeLabel(sx.name);
+            const exIndex = day.exercises.findIndex((ex) => {
+              const exName = normalizeLabel(ex.nom);
+              return exName === sxName || exName.includes(sxName) || sxName.includes(exName);
+            });
+            if (exIndex === -1) return;
+            const key = `${activeWeek}_${dayIndex}_${exIndex}`;
+            if (!next[key]) {
+              next[key] = buildExerciseAutoNote(seance, sx);
+              details[key] = {
+                key,
+                date: seance.date,
+                seanceName: seance.name,
+                exerciseName: sx.name,
+                source: seance.source,
+                note: next[key],
+                sessionNote: seance.notes || "",
+                rpeMax: seance.rpeMax,
+                energy: seance.sessionMeta?.energyRating,
+                mood: seance.sessionMeta?.moodRating,
+                sleepHours: seance.sessionMeta?.sleepHours,
+                soreness: seance.sessionMeta?.soreness,
+              };
+            }
+          });
+        });
+        setAutoSeanceNotes(next);
+        setAutoSeanceDetails(details);
+      })
+      .catch(() => {});
+  }, [activeWeek]);
 
   const save = async () => {
     if (!program) return;
@@ -1427,11 +1557,79 @@ export default function ProgrammesPage() {
                 isExpanded={expandedDays.includes(di)}
                 onToggle={() => toggleDay(di)}
                 notes={seanceNotes}
+                autoNotes={autoSeanceNotes}
+                autoDetails={autoSeanceDetails}
+                onOpenAutoDetail={setSelectedAutoDetail}
                 onUpdateNote={(exIndex, value) => updateSeanceNote(activeWeek, di, exIndex, value)}
                 isToday={di === todayDayIndex}
               />
             ))}
           </div>
+
+          {selectedAutoDetail && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+              onClick={() => setSelectedAutoDetail(null)}
+            >
+              <div
+                className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl"
+                style={{ border: `1px solid ${BORDER}` }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between px-6 py-5 border-b" style={{ borderColor: BORDER }}>
+                  <div>
+                    <p className="text-xs" style={{ color: MUTED }}>{selectedAutoDetail.date}</p>
+                    <h3 className="text-lg font-bold text-gray-900 mt-1">{selectedAutoDetail.seanceName}</h3>
+                    <p className="text-xs mt-1" style={{ color: MUTED }}>
+                      {selectedAutoDetail.source === "mobile_course" ? "Course mobile" : "Séance mobile"} · {selectedAutoDetail.exerciseName}
+                    </p>
+                  </div>
+                  <Button variant="outline" onClick={() => setSelectedAutoDetail(null)} style={{ borderColor: BORDER, color: MUTED }}>
+                    Fermer
+                  </Button>
+                </div>
+                <div className="px-6 py-5 space-y-3">
+                  <div className="rounded-xl p-4" style={{ border: `1px solid ${BORDER}`, backgroundColor: "#F8F8F8" }}>
+                    <p className="text-sm font-bold text-gray-900 mb-1">Synthèse auto</p>
+                    <p className="text-base leading-relaxed" style={{ color: "#333" }}>{selectedAutoDetail.note || "—"}</p>
+                  </div>
+                  {selectedAutoDetail.sessionNote ? (
+                    <div className="rounded-xl p-4" style={{ border: `1px solid ${BORDER}` }}>
+                      <p className="text-sm font-bold text-gray-900 mb-1">Note séance</p>
+                      <p className="text-base leading-relaxed whitespace-pre-wrap" style={{ color: "#444" }}>{selectedAutoDetail.sessionNote}</p>
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    {typeof selectedAutoDetail.rpeMax === "number" ? (
+                      <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "rgba(29,185,84,0.14)", color: ACCENT }}>
+                        RPE max {selectedAutoDetail.rpeMax}/10
+                      </span>
+                    ) : null}
+                    {typeof selectedAutoDetail.energy === "number" ? (
+                      <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#EFEFEF", color: "#444" }}>
+                        Énergie {selectedAutoDetail.energy}/5
+                      </span>
+                    ) : null}
+                    {typeof selectedAutoDetail.mood === "number" ? (
+                      <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#EFEFEF", color: "#444" }}>
+                        Humeur {selectedAutoDetail.mood}/5
+                      </span>
+                    ) : null}
+                    {selectedAutoDetail.sleepHours ? (
+                      <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#EFEFEF", color: "#444" }}>
+                        Sommeil {selectedAutoDetail.sleepHours}h
+                      </span>
+                    ) : null}
+                    {typeof selectedAutoDetail.soreness === "number" ? (
+                      <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#EFEFEF", color: "#444" }}>
+                        Courbatures {selectedAutoDetail.soreness}/5
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Sync */}
           <Card style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>

@@ -5,6 +5,8 @@ export interface ProgramExercise {
   rest: string; // e.g. "3min"
   targetSets?: number; // structured value used by mobile
   targetReps?: number; // structured value used by mobile
+  lastSessionDate?: string; // auto-filled from saved sessions
+  lastSessionSummary?: string; // auto-filled from saved sessions
 }
 
 export type DayType = 'push' | 'pull' | 'legs' | 'rest' | 'cardio' | 'full';
