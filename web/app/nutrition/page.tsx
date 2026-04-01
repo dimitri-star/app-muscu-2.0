@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Apple, ChevronDown, ChevronUp, Clock, Filter, X, Youtube, Lightbulb, ChefHat, ListOrdered, Droplets, Trophy, Flame, Plus, Pencil, Trash2 } from "lucide-react";
 import { recipes, nutritionPlan } from "@/lib/mockData";
+import { useUserStore } from "@/lib/userStore";
 import {
   Area,
   AreaChart,
@@ -158,7 +159,7 @@ const SHOPPING_GROUPS: {
 ];
 
 
-function PlanMealAccordion({ meal }: { meal: typeof nutritionPlan.days[0]['meals'][0] }) {
+function PlanMealAccordion({ meal }: { meal: typeof nutritionPlan.days[0]["meals"][0] }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="border-b last:border-b-0" style={{ borderColor: BORDER }}>
@@ -410,6 +411,63 @@ export default function NutritionPage() {
   const [groceryEditor, setGroceryEditor] = useState<GroceryEditorState>(null);
   const [weeklyRows, setWeeklyRows] = useState<WeeklyTrackingRow[]>([]);
   const [exportToast, setExportToast] = useState<string | null>(null);
+
+  const { profile } = useUserStore();
+
+  const targetCalories = profile.macros.kcal;
+  const targetProtein = profile.macros.protein;
+  const targetCarbs = profile.macros.carbs;
+  const targetFat = profile.macros.fat;
+
+  const activePlanName = useMemo(() => {
+    const goalLabel =
+      profile.goal === "masse"
+        ? "Prise de masse"
+        : profile.goal === "seche"
+          ? "Sèche"
+          : profile.goal === "maintien"
+            ? "Maintien"
+            : "Force";
+    return `${goalLabel} — ${targetCalories} kcal`;
+  }, [profile.goal, targetCalories]);
+
+  const scaledPlan = useMemo(() => {
+    const calorieFactor =
+      nutritionPlan.target.calories > 0 ? targetCalories / nutritionPlan.target.calories : 1;
+    const proteinFactor =
+      nutritionPlan.target.protein > 0 ? targetProtein / nutritionPlan.target.protein : 1;
+    const carbFactor =
+      nutritionPlan.target.carbs > 0 ? targetCarbs / nutritionPlan.target.carbs : 1;
+    const fatFactor =
+      nutritionPlan.target.fat > 0 ? targetFat / nutritionPlan.target.fat : 1;
+
+    return {
+      ...nutritionPlan,
+      target: {
+        calories: targetCalories,
+        protein: targetProtein,
+        carbs: targetCarbs,
+        fat: targetFat,
+      },
+      days: nutritionPlan.days.map((day) => ({
+        ...day,
+        meals: day.meals.map((meal) => ({
+          ...meal,
+          calories: Math.round(meal.calories * calorieFactor),
+          protein: Math.round(meal.protein * proteinFactor),
+          carbs: Math.round(meal.carbs * carbFactor),
+          fat: Math.round(meal.fat * fatFactor),
+          items: meal.items?.map((item) => ({
+            ...item,
+            calories: Math.round(item.calories * calorieFactor),
+            protein: Math.round(item.protein * proteinFactor),
+            carbs: Math.round(item.carbs * carbFactor),
+            fat: Math.round(item.fat * fatFactor),
+          })),
+        })),
+      })),
+    };
+  }, [targetCalories, targetProtein, targetCarbs, targetFat]);
 
   useEffect(() => {
     fetch("/api/recipes")
@@ -840,22 +898,22 @@ Retourne UNIQUEMENT un JSON objet:
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-lg font-bold text-gray-900">{nutritionPlan.name}</h2>
+                      <h2 className="text-lg font-bold text-gray-900">{activePlanName}</h2>
                       <Badge style={{ backgroundColor: ACCENT, color: "#FFFFFF" }} className="text-xs font-bold">
                         ACTIF
                       </Badge>
                     </div>
                     <p className="text-xs mt-0.5" style={{ color: MUTED }}>
-                      Ajustement : +20g riz midi ou +50g patate soir pour atteindre 275g glucides
+                      Ajustement : modifie les portions de féculents pour viser {targetCarbs}g de glucides
                     </p>
                   </div>
                 </div>
                 <div className="flex gap-6 text-center">
                   {[
-                    { label: "Calories", value: `${nutritionPlan.target.calories}`, unit: "kcal", color: "#EF4444" },
-                    { label: "Protéines", value: `${nutritionPlan.target.protein}`, unit: "g", color: ACCENT },
-                    { label: "Glucides", value: `${nutritionPlan.target.carbs}`, unit: "g", color: "#4C9BE8" },
-                    { label: "Lipides", value: `${nutritionPlan.target.fat}`, unit: "g", color: "#F59E0B" },
+                    { label: "Calories", value: `${targetCalories}`, unit: "kcal", color: "#EF4444" },
+                    { label: "Protéines", value: `${targetProtein}`, unit: "g", color: ACCENT },
+                    { label: "Glucides", value: `${targetCarbs}`, unit: "g", color: "#4C9BE8" },
+                    { label: "Lipides", value: `${targetFat}`, unit: "g", color: "#F59E0B" },
                   ].map((t) => (
                     <div key={t.label}>
                       <p className="text-xl font-black" style={{ color: t.color }}>{t.value}<span className="text-xs font-normal ml-0.5">{t.unit}</span></p>
@@ -868,7 +926,7 @@ Retourne UNIQUEMENT un JSON objet:
           </Card>
 
           {/* Detailed meals — accordion per repas */}
-          {nutritionPlan.days.map((day, di) => (
+          {scaledPlan.days.map((day, di) => (
             <Card key={di} style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}>
               <CardHeader className="pb-0">
                 <CardTitle className="text-sm font-semibold text-gray-900">{day.day}</CardTitle>
